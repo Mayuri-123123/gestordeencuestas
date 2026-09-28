@@ -5,29 +5,44 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+// ============================================================================
+// ¿PARA QUÉ SIRVE ESTE ARCHIVO?
+// ----------------------------------------------------------------------------
+// Representa UNA ENCUESTA: un título, su lista de preguntas y las respuestas
+// anónimas recibidas. Es el "corazón" del dominio.
+// ----------------------------------------------------------------------------
+// REGLA 1 (la más importante de esta clase): mientras la encuesta está en
+// BORRADOR se pueden agregar preguntas; en cuanto se PUBLICA, el
+// cuestionario queda CONGELADO para siempre. Cualquier intento de agregar
+// preguntas después de publicar lanza IllegalStateException.
+// ----------------------------------------------------------------------------
+// Además, los métodos preguntas() y respuestas() devuelven COPIAS
+// inmodificables, así nadie puede alterar el contenido "por la puerta
+// de atrás" usando la lista devuelta.
+// ============================================================================
+
 /**
  * Encuesta con preguntas de opción única y respuestas anónimas.
  *
- * <p><b>Regla 1 — Inmutabilidad tras publicar:</b> mientras el estado sea
- * {@link EstadoEncuesta#BORRADOR} pueden añadirse preguntas. En cuanto se
- * invoca {@link #publicar()}, el estado cambia a
- * {@link EstadoEncuesta#PUBLICADA} de forma irreversible y cualquier intento
- * de {@link #agregarPregunta} lanza {@link IllegalStateException}.
- * Además, {@link #preguntas()} y {@link #respuestas()} devuelven copias
- * inmodificables ({@code List.copyOf}), por lo que ni siquiera por referencia
- * puede mutarse el interior.
- *
- * <p>Hilos: métodos de mutación sincronizados; el estado es {@code volatile}
- * para visibilidad inmediata entre hilos.
+ * <p>Hilos: los métodos que modifican datos son {@code synchronized} y el
+ * estado es {@code volatile}, para que el programa sea seguro aunque varias
+ * personas respondan al mismo tiempo.
  */
 public final class Encuesta {
 
-    private final UUID id;
-    private final String titulo;
-    private volatile EstadoEncuesta estado;
-    private final List<Pregunta> preguntas = new ArrayList<>();
-    private final List<Respuesta> respuestas = new ArrayList<>();
+    // ---- Datos internos (nadie los toca directamente desde fuera) ----
+    private final UUID id;                 // Identificador único de la encuesta
+    private final String titulo;           // Título visible, ej: "Hábitos de estudio"
+    private volatile EstadoEncuesta estado; // Estado actual (empieza en BORRADOR)
+    private final List<Pregunta> preguntas = new ArrayList<>();   // Cuestionario
+    private final List<Respuesta> respuestas = new ArrayList<>(); // Respuestas anónimas
 
+    /**
+     * Crea una encuesta nueva (siempre nace en BORRADOR y sin preguntas).
+     *
+     * @param id     identificador (lo genera el sistema)
+     * @param titulo título visible (no vacío, máx. 150 caracteres)
+     */
     public Encuesta(UUID id, String titulo) {
         this.id = Objects.requireNonNull(id, "id no puede ser null");
         Objects.requireNonNull(titulo, "titulo no puede ser null");
@@ -42,37 +57,48 @@ public final class Encuesta {
         this.estado = EstadoEncuesta.BORRADOR;
     }
 
+    /**
+     * Forma RECOMENDADA de crear una encuesta: solo das el título.
+     */
     public static Encuesta nueva(String titulo) {
         return new Encuesta(UUID.randomUUID(), titulo);
     }
 
+    /** Identificador único de la encuesta. */
     public UUID id() {
         return id;
     }
 
+    /** Título visible de la encuesta. */
     public String titulo() {
         return titulo;
     }
 
+    /** Estado actual: BORRADOR, PUBLICADA o CERRADA. */
     public EstadoEncuesta estado() {
         return estado;
     }
 
+    /** Atajo útil: true si ya está abierta al público. */
     public boolean estaPublicada() {
         return estado == EstadoEncuesta.PUBLICADA;
     }
 
     /**
-     * Añade una pregunta. SOLO en BORRADOR.
+     * Agrega una pregunta al cuestionario. SOLO funciona en BORRADOR.
+     * ---- Aplica la Regla 1 ----
      *
+     * @param pregunta pregunta ya validada que se quiere agregar
      * @throws IllegalStateException si la encuesta ya está publicada o cerrada
      */
     public synchronized void agregarPregunta(Pregunta pregunta) {
         Objects.requireNonNull(pregunta, "pregunta no puede ser null");
+        // REGLA 1: publicada o cerrada = cuestionario congelado, sin excepciones.
         if (estado != EstadoEncuesta.BORRADOR) {
             throw new IllegalStateException(
                     "Regla 1: encuesta publicada/cerrada no puede cambiar sus preguntas (estado=%s)".formatted(estado));
         }
+        // No se permite agregar dos veces la misma pregunta (mismo id).
         boolean duplicada = preguntas.stream().anyMatch(p -> p.id().equals(pregunta.id()));
         if (duplicada) {
             throw new IllegalArgumentException("pregunta duplicada: " + pregunta.id());
@@ -81,9 +107,9 @@ public final class Encuesta {
     }
 
     /**
-     * Publica la encuesta. Exige al menos una pregunta con al menos
-     * dos opciones cada una (ya garantizado por {@link Pregunta}).
-     * Transición irreversible BORRADOR -&gt; PUBLICADA.
+     * PUBLICA la encuesta: pasa de BORRADOR a PUBLICADA para siempre.
+     * Exige al menos 1 pregunta (no tiene sentido publicar una encuesta vacía).
+     * Es IRREVERSIBLE: no hay forma de volver a BORRADOR.
      */
     public synchronized void publicar() {
         if (estado != EstadoEncuesta.BORRADOR) {
@@ -95,7 +121,10 @@ public final class Encuesta {
         estado = EstadoEncuesta.PUBLICADA;
     }
 
-    /** Cierra la encuesta: deja de aceptar respuestas, sin mutar preguntas. */
+    /**
+     * CIERRA la encuesta: deja de aceptar respuestas.
+     * Las preguntas y respuestas ya guardadas NO se alteran.
+     */
     public synchronized void cerrar() {
         if (estado != EstadoEncuesta.PUBLICADA) {
             throw new IllegalStateException("solo una encuesta PUBLICADA puede cerrarse (estado=%s)".formatted(estado));
@@ -104,30 +133,38 @@ public final class Encuesta {
     }
 
     /**
-     * Registra una respuesta ya validada por {@link EncuestaService}.
-     * Solo se aceptan respuestas en estado PUBLICADA.
+     * Guarda una respuesta ya validada por el servicio.
+     * Es de uso INTERNO (package-private): solo EncuestaService puede llamarlo,
+     * después de verificar que la respuesta sea completa y válida.
      */
     synchronized void agregarRespuesta(Respuesta respuesta) {
         Objects.requireNonNull(respuesta, "respuesta no puede ser null");
+        // Solo una encuesta abierta recibe respuestas.
         if (estado != EstadoEncuesta.PUBLICADA) {
             throw new IllegalStateException("solo una encuesta PUBLICADA acepta respuestas (estado=%s)".formatted(estado));
         }
+        // La respuesta debe ser DE ESTA encuesta, no de otra.
         if (!respuesta.encuestaId().equals(id)) {
             throw new IllegalArgumentException("la respuesta pertenece a otra encuesta");
         }
         respuestas.add(respuesta);
     }
 
-    /** Copia inmodificable: publicar congela de facto el cuestionario. */
+    /**
+     * Devuelve las preguntas como lista INMODIFICABLE (solo lectura).
+     * Aunque la encuesta esté publicada, nadie puede alterar el cuestionario
+     * usando esta lista.
+     */
     public synchronized List<Pregunta> preguntas() {
         return List.copyOf(preguntas);
     }
 
-    /** Copia inmodificable de respuestas anónimas. */
+    /** Devuelve las respuestas anónimas como lista INMODIFICABLE (solo lectura). */
     public synchronized List<Respuesta> respuestas() {
         return List.copyOf(respuestas);
     }
 
+    /** ¿Cuántas respuestas anónimas se han registrado hasta ahora? */
     public synchronized int totalRespuestas() {
         return respuestas.size();
     }

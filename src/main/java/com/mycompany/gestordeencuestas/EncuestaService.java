@@ -2,6 +2,7 @@ package com.mycompany.gestordeencuestas;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,35 +10,43 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+// ============================================================================
+// ¿PARA QUÉ SIRVE ESTE ARCHIVO?
+// ----------------------------------------------------------------------------
+// Es el SERVICIO que coordina todo: crear encuestas, publicarlas, recibir
+// respuestas y calcular resultados. La interfaz gráfica (EncuestaGUI) y el
+// programa de consola (GestorDeEncuestas) NO tocan los datos directamente:
+// siempre pasan por aquí, así todas las reglas se aplican en un solo lugar.
+// ----------------------------------------------------------------------------
+// Se divide en dos módulos (reparto del trabajo en equipo):
+//   MÓDULO A (creación/publicación): crearEncuesta, agregarPregunta, publicar
+//   MÓDULO B (respuestas/estadísticas): responder, resultados, conteo
+// ----------------------------------------------------------------------------
+// Aquí vive el CONTRATO DE VALIDACIÓN (integración A+B): los 5 controles que
+// toda respuesta debe pasar antes de guardarse (ver método responder).
+// ============================================================================
 
 /**
  * Servicio de aplicación: creación/publicación (módulo A) y
  * respuestas/estadísticas (módulo B).
- *
- * <h2>Contrato de validación de respuestas (integración A+B)</h2>
- * <ol>
- *   <li>La encuesta debe existir y estar {@code PUBLICADA}.</li>
- *   <li>La selección no puede ser {@code null} ni vacía.</li>
- *   <li><b>Respuesta completa:</b> el mapa debe contener exactamente las
- *       preguntas de la encuesta, ni una menos (parcial bloqueada) ni una
- *       más (extra bloqueada): {@code seleccion.keySet() == preguntaIds}.</li>
- *   <li><b>Opción válida y propia:</b> cada {@code opcionId} debe pertenecer
- *       estrictamente a su {@code preguntaId} ({@link Pregunta#contieneOpcion});
- *       cualquier opción ajena —de otra pregunta u otra encuesta— o id
- *       inventado se rechaza con {@link IllegalArgumentException} y no se
- *       almacena nada.</li>
- *   <li><b>Anonimato:</b> esta API no recibe ni almacena ningún dato personal.
- *       Los ids los genera el sistema; el cliente solo elige entre ids
- *       previamente publicados.</li>
- * </ol>
  */
 public final class EncuestaService {
 
+    // Almacén en memoria de todas las encuestas, por id.
+    // ConcurrentHashMap = seguro aunque varios usuarios voten a la vez.
     private final Map<UUID, Encuesta> encuestas = new ConcurrentHashMap<>();
 
-    // ---------- Módulo A: creación / publicación ----------
+    // ================= MÓDULO A: creación / publicación =================
 
-    /** Crea una encuesta en BORRADOR y la registra. */
+    /**
+     * ¿QUÉ HACE? Crea una encuesta nueva en estado BORRADOR y la guarda.
+     * ¿PARA QUÉ? Es el primer paso: sin encuesta no hay preguntas.
+     *
+     * @param titulo título visible de la encuesta
+     * @return la encuesta creada (en BORRADOR, lista para agregar preguntas)
+     */
     public Encuesta crearEncuesta(String titulo) {
         var encuesta = Encuesta.nueva(titulo);
         encuestas.put(encuesta.id(), encuesta);
@@ -45,31 +54,52 @@ public final class EncuestaService {
     }
 
     /**
-     * Añade una pregunta a una encuesta en BORRADOR.
-     * Los UUID de pregunta y opciones los genera el sistema (anti-manipulación).
+     * ¿QUÉ HACE? Crea una pregunta (con sus opciones) y la agrega a una
+     * encuesta que aún esté en BORRADOR.
+     * ¿PARA QUÉ? Para armar el cuestionario antes de publicar.
+     * SEGURIDAD: los ids los genera el sistema; quien llama solo da textos.
+     *
+     * @param encuestaId     a qué encuesta agregar la pregunta
+     * @param textoPregunta  enunciado, ej: "¿Dónde prefieres estudiar?"
+     * @param textosOpciones opciones, ej: List.of("Casa", "Biblioteca", "Café")
+     * @return la pregunta creada y agregada
      */
     public Pregunta agregarPregunta(UUID encuestaId, String textoPregunta, List<String> textosOpciones) {
         Objects.requireNonNull(encuestaId, "encuestaId no puede ser null");
         var encuesta = obtenerEncuesta(encuestaId);
         var pregunta = Pregunta.de(textoPregunta, textosOpciones);
-        encuesta.agregarPregunta(pregunta); // lanza IllegalStateException si publicada (Regla 1)
+        // Si la encuesta ya está publicada, aquí salta IllegalStateException (Regla 1).
+        encuesta.agregarPregunta(pregunta);
         return pregunta;
     }
 
-    /** Publica la encuesta (transición irreversible). */
+    /**
+     * ¿QUÉ HACE? Publica la encuesta (BORRADOR -&gt; PUBLICADA).
+     * ¿PARA QUÉ? Abre la encuesta al público y CONGELA el cuestionario.
+     */
     public Encuesta publicar(UUID encuestaId) {
         var encuesta = obtenerEncuesta(Objects.requireNonNull(encuestaId));
         encuesta.publicar();
         return encuesta;
     }
 
-    /** Cierra la encuesta (deja de aceptar respuestas). */
+    /**
+     * ¿QUÉ HACE? Cierra la encuesta (PUBLICADA -&gt; CERRADA).
+     * ¿PARA QUÉ? Termina la recolección; solo quedan visibles los resultados.
+     */
     public Encuesta cerrar(UUID encuestaId) {
         var encuesta = obtenerEncuesta(Objects.requireNonNull(encuestaId));
         encuesta.cerrar();
         return encuesta;
     }
 
+    /**
+     * ¿QUÉ HACE? Busca una encuesta por su id.
+     * ¿PARA QUÉ? Todos los métodos la usan para encontrar la encuesta antes
+     * de operar con ella.
+     *
+     * @throws NoSuchElementException si el id no existe
+     */
     public Encuesta obtenerEncuesta(UUID encuestaId) {
         Objects.requireNonNull(encuestaId, "encuestaId no puede ser null");
         var encuesta = encuestas.get(encuestaId);
@@ -79,53 +109,68 @@ public final class EncuestaService {
         return encuesta;
     }
 
-    // ---------- Módulo B: respuestas y estadísticas ----------
+    // ================= MÓDULO B: respuestas y estadísticas =================
 
     /**
-     * Registra una respuesta anónima y completa.
+     * ¿QUÉ HACE? Registra UNA respuesta anónima y completa.
+     * ¿PARA QUÉ? Es la operación de "votar": el público elige una opción
+     * por cada pregunta, sin dar ningún dato personal.
+     *
+     * <h2>CONTRATO DE VALIDACIÓN (la respuesta debe pasar los 5 controles):</h2>
+     * <ol>
+     *   <li>La encuesta existe y está PUBLICADA (si no, error).</li>
+     *   <li>La selección no es null ni vacía.</li>
+     *   <li>RESPUESTA COMPLETA: el mapa trae EXACTAMENTE las preguntas de la
+     *       encuesta (ni una menos = parcial bloqueada, ni una más = extra).</li>
+     *   <li>OPCIÓN VÁLIDA Y PROPIA: cada opción pertenece estrictamente a su
+     *       pregunta; lo ajeno o inventado se rechaza y NO se guarda nada.</li>
+     *   <li>ANONIMATO: no se pide ni se guarda ningún dato personal.</li>
+     * </ol>
      *
      * @param encuestaId id de la encuesta PUBLICADA
-     * @param seleccion  mapa preguntaId -&gt; opcionId (copia defensiva interna)
-     * @return la {@link Respuesta} anónima registrada
-     * @throws IllegalStateException    si la encuesta no está PUBLICADA
-     * @throws IllegalArgumentException si la respuesta es parcial, trae extras,
-     *                                  referencia preguntas inexistentes u
-     *                                  opciones ajenas/manipuladas
+     * @param seleccion  mapa preguntaId -&gt; opcionId con TODAS las preguntas
+     * @return la Respuesta anónima registrada
      */
     public Respuesta responder(UUID encuestaId, Map<UUID, UUID> seleccion) {
         Objects.requireNonNull(encuestaId, "encuestaId no puede ser null");
         Objects.requireNonNull(seleccion, "seleccion no puede ser null (use un mapa pregunta->opcion)");
         var encuesta = obtenerEncuesta(encuestaId);
 
+        // Control 1: solo una encuesta ABIERTA recibe votos.
         if (!encuesta.estaPublicada()) {
             throw new IllegalStateException(
                     "solo una encuesta PUBLICADA acepta respuestas (estado=%s)".formatted(encuesta.estado()));
         }
+        // Control 2: no se aceptan votos vacíos.
         if (seleccion.isEmpty()) {
             throw new IllegalArgumentException("respuesta vacía bloqueada: debe responder todas las preguntas");
         }
 
         var preguntas = encuesta.preguntas();
-        var idsEsperados = preguntas.stream().map(Pregunta::id).collect(java.util.stream.Collectors.toSet());
+        // Conjunto de preguntas que la encuesta EXIGE responder.
+        var idsEsperados = preguntas.stream().map(Pregunta::id).collect(Collectors.toSet());
 
-        // 1) Completitud exacta: evita respuesta parcial y extras.
+        // Control 3: COMPLETITUD EXACTA. Compara lo recibido con lo exigido:
+        // si falta alguna pregunta (parcial) o sobra alguna (extra), se bloquea
+        // y se informa CUÁLES faltan y cuáles sobran para facilitar la defensa.
         if (!seleccion.keySet().equals(idsEsperados)) {
-            var faltantes = new java.util.HashSet<>(idsEsperados);
+            var faltantes = new HashSet<>(idsEsperados);
             faltantes.removeAll(seleccion.keySet());
-            var sobrantes = new java.util.HashSet<>(seleccion.keySet());
+            var sobrantes = new HashSet<>(seleccion.keySet());
             sobrantes.removeAll(idsEsperados);
             throw new IllegalArgumentException(
                     "respuesta incompleta o con extras bloqueada: faltantes=%s sobrantes=%s (se exigen %d preguntas)"
                             .formatted(faltantes, sobrantes, idsEsperados.size()));
         }
 
-        // 2) Pertenencia estricta opción->pregunta (bloquea opción ajena/manipulada).
+        // Control 4: PERTENENCIA ESTRICTA. Cada opción debe ser DE SU pregunta.
+        // Se usa un mapa auxiliar preguntaId -> Pregunta para buscar rápido.
         var porId = new HashMap<UUID, Pregunta>();
         for (var p : preguntas) {
             porId.put(p.id(), p);
         }
         for (var entry : seleccion.entrySet()) {
-            var pregunta = porId.get(entry.getKey()); // existe por el check anterior
+            var pregunta = porId.get(entry.getKey()); // existe (control 3 ya pasó)
             var opcionId = Objects.requireNonNull(entry.getValue(),
                     "opcionId no puede ser null para pregunta " + entry.getKey());
             if (!pregunta.contieneOpcion(opcionId)) {
@@ -135,16 +180,18 @@ public final class EncuestaService {
             }
         }
 
+        // Todo válido: se crea la respuesta anónima y se guarda. Nada personal.
         var respuesta = Respuesta.anonima(encuestaId, seleccion);
         encuesta.agregarRespuesta(respuesta);
         return respuesta;
     }
 
     /**
-     * Calcula porcentajes 0-100 por opción de cada pregunta.
+     * ¿QUÉ HACE? Calcula el PORCENTAJE (0-100) de cada opción en cada pregunta.
+     * ¿PARA QUÉ? Para mostrar resultados tipo "1-3h: 66.7%".
+     * Si aún no hay votos, todo es 0.0 (así se evita dividir entre cero).
      *
-     * @return mapa inmodificable preguntaId -&gt; (opcionId -&gt; porcentaje).
-     *         Sin respuestas, todo es 0.0 (evita división por cero).
+     * @return mapa preguntaId -&gt; (opcionId -&gt; porcentaje), inmodificable
      */
     public Map<UUID, Map<UUID, Double>> resultados(UUID encuestaId) {
         var encuesta = obtenerEncuesta(Objects.requireNonNull(encuestaId));
@@ -154,6 +201,7 @@ public final class EncuestaService {
 
         var salida = new LinkedHashMap<UUID, Map<UUID, Double>>();
         for (var pregunta : preguntas) {
+            // Contamos votos por opción...
             var conteo = new HashMap<UUID, Long>();
             for (var o : pregunta.opciones()) {
                 conteo.put(o.id(), 0L);
@@ -164,6 +212,7 @@ public final class EncuestaService {
                     conteo.merge(elegida, 1L, Long::sum);
                 }
             }
+            // ...y los convertimos a porcentaje.
             var porcentajes = new LinkedHashMap<UUID, Double>();
             for (var o : pregunta.opciones()) {
                 double pct = (total == 0) ? 0.0 : (conteo.get(o.id()) * 100.0 / total);
@@ -174,7 +223,12 @@ public final class EncuestaService {
         return Collections.unmodifiableMap(salida);
     }
 
-    /** Conteo absoluto por opción (complementa a {@link #resultados}). */
+    /**
+     * ¿QUÉ HACE? Cuenta los VOTOS (números absolutos) de cada opción.
+     * ¿PARA QUÉ? Complementa a resultados(): "Biblioteca: 2 votos (66.7%)".
+     *
+     * @return mapa preguntaId -&gt; (opcionId -&gt; votos), inmodificable
+     */
     public Map<UUID, Map<UUID, Long>> conteo(UUID encuestaId) {
         var encuesta = obtenerEncuesta(Objects.requireNonNull(encuestaId));
         var salida = new LinkedHashMap<UUID, Map<UUID, Long>>();
@@ -194,6 +248,9 @@ public final class EncuestaService {
         return Collections.unmodifiableMap(salida);
     }
 
+    /**
+     * ¿QUÉ HACE? Dice cuántas respuestas anónimas tiene la encuesta.
+     */
     public int totalRespuestas(UUID encuestaId) {
         return obtenerEncuesta(encuestaId).totalRespuestas();
     }
