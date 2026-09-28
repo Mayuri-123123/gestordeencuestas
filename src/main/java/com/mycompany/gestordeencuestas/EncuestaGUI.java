@@ -22,12 +22,14 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -39,7 +41,13 @@ import javax.swing.UIManager;
 // Es la VENTANA GRÁFICA del programa con estilo de panel de control moderno:
 // barra lateral de navegación, tarjetas (cards) blancas con bordes
 // redondeados, tipografía clara y gráficos de resultados dibujados a medida.
-// Tiene 2 vistas: "Votar" (voto anónimo) y "Resultados" (barras en vivo).
+// Tiene 3 funciones: "Votar" (voto anónimo), "Resultados" (barras en vivo)
+// y "+ Crear formulario" (el usuario arma su propia encuesta: título,
+// preguntas y opciones, que se publica con las mismas reglas de siempre).
+// ----------------------------------------------------------------------------
+// CONTRASTE: los botones de color desactivan el pintado del Look & Feel
+// nativo (que si no los dejaba grises con texto ilegible) y usan fondos
+// oscuros verificados (blanco sobre #1E6EA6 = 5.5:1, sobre #1E8449 = 4.7:1).
 // ----------------------------------------------------------------------------
 // NOTA DE ROBUSTEZ: esta versión NO usa JProgressBar. Las barras son el
 // componente BarraResultado (dibujado manualmente con valores limitados
@@ -57,7 +65,8 @@ import javax.swing.UIManager;
 // ============================================================================
 
 /**
- * Panel de control moderno del Gestor de Encuestas: voto anónimo + resultados.
+ * Panel de control moderno del Gestor de Encuestas: voto anónimo, resultados
+ * en vivo y creador de formularios propios.
  */
 public class EncuestaGUI extends JFrame {
 
@@ -66,7 +75,11 @@ public class EncuestaGUI extends JFrame {
     private static final Color FONDO_TARJETA = Color.WHITE;          // tarjetas blancas
     private static final Color LATERAL = new Color(22, 35, 58);      // azul noche (sidebar)
     private static final Color LATERAL_SEL = new Color(41, 128, 185);// acento al seleccionar
-    private static final Color ACENTO = new Color(41, 128, 185);     // azul botones y barras
+    private static final Color ACENTO = new Color(41, 128, 185);     // azul barras y detalles
+    // Fondos de BOTONES (más oscuros que ACENTO a propósito): con texto blanco
+    // dan contraste 5.5:1 (BOTON_FONDO) y 4.7:1 (VERDE_OSCURO), ambos aptos AA.
+    private static final Color BOTON_FONDO = new Color(30, 110, 166); // azul oscuro: Enviar + nav activa
+    private static final Color VERDE_OSCURO = new Color(30, 132, 73); // verde oscuro: Crear formulario
     private static final Color VERDE = new Color(39, 174, 96);       // sello "anónimo"
     private static final Color TEXTO = new Color(33, 43, 61);        // texto principal
     private static final Color TEXTO_SUAVE = new Color(120, 134, 155);// texto secundario
@@ -138,7 +151,8 @@ public class EncuestaGUI extends JFrame {
         var titulo = new JLabel("Gestor de Encuestas");
         titulo.setFont(fuente(Font.BOLD, 21));
         titulo.setForeground(TEXTO);
-        var subtitulo = new JLabel("Panel de control  ·  Una opción por pregunta  ·  Java 25");
+        // Subtítulo con el formulario ACTIVO (se actualiza al crear uno propio).
+        var subtitulo = new JLabel("Panel de control  ·  " + tituloCorto() + "  ·  Java 25");
         subtitulo.setFont(fuente(Font.PLAIN, 12));
         subtitulo.setForeground(TEXTO_SUAVE);
         var textos = new JPanel(new GridLayout(2, 1, 0, 2));
@@ -190,6 +204,12 @@ public class EncuestaGUI extends JFrame {
         lateral.add(navVotar);
         lateral.add(Box.createVerticalStrut(6));
         lateral.add(navResultados);
+        lateral.add(Box.createVerticalStrut(6));
+        // NUEVO: botón para crear un formulario propio (título + preguntas +
+        // opciones). Verde oscuro para distinguirlo de la navegación.
+        var crear = botonAccionLateral("+ Crear formulario", VERDE_OSCURO);
+        crear.addActionListener(e -> abrirCreadorFormulario());
+        lateral.add(crear);
         lateral.add(Box.createVerticalStrut(22));
 
         lateral.add(etiquetaLateral("ACTIVIDAD"));
@@ -216,6 +236,9 @@ public class EncuestaGUI extends JFrame {
         reiniciar.setForeground(new Color(200, 214, 232));
         reiniciar.setBackground(new Color(33, 50, 80));
         reiniciar.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        // CONTRASTE: garantiza que el fondo oscuro se pinte (ver Enviar).
+        reiniciar.setContentAreaFilled(false);
+        reiniciar.setOpaque(true);
         // Restaura la encuesta de ejemplo con sus 3 votos iniciales.
         reiniciar.addActionListener(e -> {
             cargarDemo();
@@ -300,9 +323,16 @@ public class EncuestaGUI extends JFrame {
 
         var enviar = new JButton("Enviar respuesta anónima");
         enviar.setFont(fuente(Font.BOLD, 15));
-        enviar.setBackground(ACENTO);
+        enviar.setBackground(BOTON_FONDO); // azul oscuro: blanco encima = 5.5:1
         enviar.setForeground(Color.WHITE);
         enviar.setFocusPainted(false);
+        // CONTRASTE (causa raíz del reporte): con el Look & Feel nativo de
+        // Windows, el fondo propio de un JButton se IGNORA y se pinta gris
+        // claro, dejando el texto blanco ilegible. Desactivar el pintado del
+        // L&F + hacerlo opaco obliga a usar NUESTRO fondo oscuro. Sin esto,
+        // ningún color de fondo sirve.
+        enviar.setContentAreaFilled(false);
+        enviar.setOpaque(true);
         enviar.setBorder(BorderFactory.createEmptyBorder(12, 20, 12, 20));
         enviar.setAlignmentX(Component.LEFT_ALIGNMENT);
         enviar.setMaximumSize(new Dimension(340, 52));
@@ -595,11 +625,43 @@ public class EncuestaGUI extends JFrame {
         b.setHorizontalAlignment(SwingConstants.LEFT);
         b.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
         b.setMaximumSize(new Dimension(220, 40));
+        // CONTRASTE: mismo caso que "Enviar": sin estas 2 líneas, el L&F nativo
+        // pinta el botón gris claro y el texto blanco se vuelve invisible.
+        b.setContentAreaFilled(false);
+        b.setOpaque(true);
         // Colores distintos según esté seleccionado o no (se actualizan solos).
-        b.setBackground(activo ? LATERAL_SEL : LATERAL);
+        b.setBackground(activo ? BOTON_FONDO : LATERAL);
         b.setForeground(Color.WHITE);
-        b.addChangeListener(e -> b.setBackground(b.isSelected() ? LATERAL_SEL : LATERAL));
+        b.addChangeListener(e -> b.setBackground(b.isSelected() ? BOTON_FONDO : LATERAL));
         return b;
+    }
+
+    /**
+     * ¿QUÉ HACE? Botón de ACCIÓN del lateral (no es navegación: ejecuta algo).
+     * ¿PARA QUÉ? Para "+ Crear formulario": mismo tratamiento de contraste
+     * garantizado, pero con su propio color para distinguirlo del menú.
+     */
+    private static JButton botonAccionLateral(String texto, Color fondo) {
+        var b = new JButton(texto);
+        b.setFocusPainted(false);
+        b.setFont(fuente(Font.BOLD, 13));
+        b.setHorizontalAlignment(SwingConstants.LEFT);
+        b.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
+        b.setMaximumSize(new Dimension(220, 40));
+        b.setContentAreaFilled(false); // ver comentario de contraste en Enviar
+        b.setOpaque(true);
+        b.setBackground(fondo);
+        b.setForeground(Color.WHITE);
+        return b;
+    }
+
+    /**
+     * ¿QUÉ HACE? Devuelve el título del formulario activo recortado a 40
+     * caracteres para que quepa en el encabezado.
+     */
+    private String tituloCorto() {
+        String t = (encuesta == null) ? "" : encuesta.titulo();
+        return (t.length() <= 40) ? t : (t.substring(0, 37) + "...");
     }
 
     /** ¿QUÉ HACE? Tarjeta de aviso para casos vacíos (ej: sin preguntas). */
@@ -623,7 +685,7 @@ public class EncuestaGUI extends JFrame {
      * ¿QUÉ ES? Un JPanel con fondo de esquinas redondeadas.
      * ¿PARA QUÉ? Da el aspecto moderno de "tarjetas" del panel de control.
      */
-    private static final class RoundedPanel extends JPanel {
+    private static class RoundedPanel extends JPanel {
         private final int radio; // qué tan redondas son las esquinas
         private final Color fondo;
 
@@ -710,7 +772,286 @@ public class EncuestaGUI extends JFrame {
     }
 
     // ============================================================================
-    // 7) ARRANQUE DEL PROGRAMA (aspecto nativo + hilo seguro de Swing)
+    // 8) CREADOR DE FORMULARIO PROPIO (título + preguntas + opciones)
+    // ============================================================================
+
+    /**
+     * ¿QUÉ HACE? Abre el asistente (ventana modal) para crear un formulario
+     * propio: el usuario escribe el título, agrega preguntas y define las
+     * opciones de cada una. Al pulsar "Publicar formulario", se crea y se
+     * publica, pasando a ser el formulario ACTIVO para votar y ver resultados.
+     * ¿CÓMO SE MANTIENEN LAS REGLAS? No hay código nuevo de reglas: se usan
+     * SOLO los servicios existentes (crearEncuesta / agregarPregunta /
+     * publicar), que ya validan todo: título no vacío, enunciados no vacíos,
+     * 2-10 opciones por pregunta, mínimo 1 pregunta para publicar y
+     * congelamiento total tras publicar (Regla 1). El voto posterior sigue
+     * pasando por responder() (Reglas 2 y 3). Anonimato intacto: el asistente
+     * no tiene ningún campo de datos personales.
+     */
+    private void abrirCreadorFormulario() {
+        // Modal (true): bloquea la ventana principal hasta terminar o cancelar.
+        var dialogo = new JDialog(this, "Crear mi propio formulario", true);
+        dialogo.setSize(680, 640);
+        dialogo.setLocationRelativeTo(this);
+        dialogo.setLayout(new BorderLayout());
+
+        // ---- Arriba: título del nuevo formulario ----
+        var norte = new JPanel(new BorderLayout(0, 4));
+        norte.setBackground(FONDO_TARJETA);
+        norte.setBorder(BorderFactory.createEmptyBorder(14, 16, 10, 16));
+        var etTitulo = new JLabel("Título del formulario");
+        etTitulo.setFont(fuente(Font.BOLD, 14));
+        etTitulo.setForeground(TEXTO);
+        var campoTitulo = new JTextField();
+        campoTitulo.setFont(fuente(Font.PLAIN, 14));
+        norte.add(etTitulo, BorderLayout.NORTH);
+        norte.add(campoTitulo, BorderLayout.CENTER);
+        dialogo.add(norte, BorderLayout.NORTH);
+
+        // ---- Centro: bloques de preguntas (con scroll si hay muchas) ----
+        var contenedor = new JPanel();
+        contenedor.setBackground(FONDO_APP);
+        contenedor.setLayout(new BoxLayout(contenedor, BoxLayout.Y_AXIS));
+        contenedor.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        var bloques = new ArrayList<BloquePregunta>();
+        // Refresca números y botones tras agregar/quitar (siempre en orden).
+        Runnable refrescar = () -> {
+            contenedor.removeAll();
+            for (int i = 0; i < bloques.size(); i++) {
+                bloques.get(i).setNumero(i + 1);
+                contenedor.add(bloques.get(i));
+                contenedor.add(Box.createVerticalStrut(10));
+            }
+            contenedor.revalidate();
+            contenedor.repaint();
+        };
+        // Empieza con 2 bloques vacíos (igual que la demo: lo recomendado).
+        bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
+        bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
+        refrescar.run();
+        dialogo.add(new JScrollPane(contenedor), BorderLayout.CENTER);
+
+        // ---- Abajo: agregar pregunta + publicar/cancelar ----
+        var sur = new JPanel(new BorderLayout(10, 0));
+        sur.setBackground(FONDO_TARJETA);
+        sur.setBorder(BorderFactory.createEmptyBorder(10, 16, 12, 16));
+        var agregar = new JButton("+ Agregar pregunta");
+        agregar.setFocusPainted(false);
+        agregar.setFont(fuente(Font.BOLD, 13));
+        agregar.addActionListener(e -> {
+            bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
+            refrescar.run();
+        });
+        var botones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        botones.setOpaque(false);
+        var cancelar = new JButton("Cancelar");
+        cancelar.setFocusPainted(false);
+        cancelar.addActionListener(e -> dialogo.dispose());
+        var publicar = new JButton("Publicar formulario");
+        publicar.setFont(fuente(Font.BOLD, 13));
+        publicar.setBackground(BOTON_FONDO); // mismo azul legible que Enviar
+        publicar.setForeground(Color.WHITE);
+        publicar.setFocusPainted(false);
+        publicar.setContentAreaFilled(false); // contraste garantizado (ver Enviar)
+        publicar.setOpaque(true);
+        publicar.addActionListener(e -> publicarFormularioPropio(dialogo, campoTitulo, bloques));
+        botones.add(cancelar);
+        botones.add(publicar);
+        sur.add(agregar, BorderLayout.WEST);
+        sur.add(botones, BorderLayout.EAST);
+        dialogo.add(sur, BorderLayout.SOUTH);
+
+        dialogo.setVisible(true); // al ser modal, espera aquí hasta cerrar
+    }
+
+    /**
+     * ¿QUÉ HACE? Quita un bloque de pregunta del asistente (lo pide el botón
+     * "Quitar" de cada bloque). No deja quitar el ÚLTIMO: siempre queda al
+     * menos 1, porque publicar exige mínimo 1 pregunta.
+     */
+    private void quitarBloque(JPanel contenedor, List<BloquePregunta> bloques, Runnable refrescar) {
+        if (bloques.size() <= 1) {
+            JOptionPane.showMessageDialog(this,
+                    "El formulario necesita al menos 1 pregunta.",
+                    "No se puede quitar", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        // Quita el ÚLTIMO bloque (orden predecible y sin índices frágiles).
+        bloques.remove(bloques.size() - 1);
+        refrescar.run();
+    }
+
+    /**
+     * ¿QUÉ HACE? Valida el asistente y publica el formulario propio.
+     * Validación en 2 capas (como en el voto): primero la ventana avisa con
+     * el número de pregunta exacta; luego los SERVICIOS reaplican las reglas
+     * del dominio y su error también se muestra. Si algo falla, NO se cambia
+     * el formulario activo (todo o nada).
+     */
+    private void publicarFormularioPropio(JDialog dialogo, JTextField campoTitulo,
+                                          List<BloquePregunta> bloques) {
+        String titulo = campoTitulo.getText().strip();
+        if (titulo.isEmpty()) {
+            avisar(dialogo, "Escribe el título del formulario.");
+            return;
+        }
+        // Capa 1 (ventana): cada bloque visible debe estar completo.
+        var datos = new ArrayList<Map.Entry<String, List<String>>>();
+        for (int i = 0; i < bloques.size(); i++) {
+            String en = bloques.get(i).enunciado();
+            if (en.isEmpty()) {
+                avisar(dialogo, "La pregunta " + (i + 1) + " no tiene enunciado.");
+                return;
+            }
+            var ops = bloques.get(i).opciones(); // textos recortados, sin vacías
+            if (ops.size() < 2) {
+                avisar(dialogo, "La pregunta " + (i + 1) + " necesita al menos 2 opciones con texto.");
+                return;
+            }
+            datos.add(Map.entry(en, ops));
+        }
+        // Capa 2 (servicios): crean y publican aplicando las reglas del dominio.
+        try {
+            var nueva = service.crearEncuesta(titulo);
+            for (var d : datos) {
+                service.agregarPregunta(nueva.id(), d.getKey(), d.getValue());
+            }
+            service.publicar(nueva.id()); // Regla 1: desde aquí queda congelada
+            encuesta = nueva;             // pasa a ser el formulario activo
+            dialogo.dispose();
+            armarContenido();             // reconstruye votar/resultados con lo nuevo
+            mensaje("Formulario \"" + tituloCorto() + "\" publicado. ¡Ya puedes votar!");
+        } catch (RuntimeException ex) {
+            // El formulario activo NO cambia: se muestra el motivo del dominio.
+            avisar(dialogo, "No se pudo publicar: " + ex.getMessage());
+        }
+    }
+
+    /** ¿QUÉ HACE? Muestra un aviso del asistente (ventana pequeña amarilla). */
+    private static void avisar(JDialog dialogo, String texto) {
+        JOptionPane.showMessageDialog(dialogo, texto,
+                "Revisa tu formulario", JOptionPane.WARNING_MESSAGE);
+    }
+
+    /**
+     * ¿QUÉ ES? Un bloque del asistente: UNA pregunta con sus opciones.
+     * ¿PARA QUÉ? Cada bloque tiene campo de enunciado, campos de opción
+     * (empieza con 2), botones +/− opción y botón de quitar pregunta.
+     * Los límites del dominio se cumplen en la interfaz: mínimo 2 y máximo
+     * 10 opciones (los botones se desactivan en los extremos).
+     */
+    private static final class BloquePregunta extends RoundedPanel {
+        private final JLabel etiquetaNum = new JLabel();
+        private final JTextField campoEnunciado = new JTextField();
+        private final JPanel listaOpciones = new JPanel();
+        private final List<JTextField> camposOpcion = new ArrayList<>();
+        private final JButton btnMas = new JButton("+ Opción");
+        private final JButton btnMenos = new JButton("− Opción");
+
+        BloquePregunta(Runnable alQuitar) {
+            super(14, FONDO_TARJETA);
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(BORDE),
+                    BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+
+            // Fila superior: "Pregunta N" + botón quitar.
+            var fila = new JPanel(new BorderLayout());
+            fila.setOpaque(false);
+            etiquetaNum.setFont(fuente(Font.BOLD, 14));
+            etiquetaNum.setForeground(TEXTO);
+            var quitar = new JButton("Quitar");
+            quitar.setFocusPainted(false);
+            quitar.setFont(fuente(Font.PLAIN, 12));
+            // Al pulsar, el diálogo quita este bloque (con mínimo de 1).
+            quitar.addActionListener(e -> alQuitar.run());
+            fila.add(etiquetaNum, BorderLayout.WEST);
+            fila.add(quitar, BorderLayout.EAST);
+            add(fila);
+            add(Box.createVerticalStrut(6));
+
+            // Enunciado de la pregunta.
+            campoEnunciado.setFont(fuente(Font.PLAIN, 13));
+            add(campoEnunciado);
+            add(Box.createVerticalStrut(8));
+
+            // Opciones (empieza con 2 vacías, como exige el dominio).
+            listaOpciones.setOpaque(false);
+            listaOpciones.setLayout(new BoxLayout(listaOpciones, BoxLayout.Y_AXIS));
+            add(listaOpciones);
+            agregarCampoOpcion();
+            agregarCampoOpcion();
+
+            // Botones +/− opción.
+            var filaBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+            filaBtns.setOpaque(false);
+            btnMas.setFocusPainted(false);
+            btnMas.addActionListener(e -> {
+                if (camposOpcion.size() < 10) {
+                    agregarCampoOpcion();
+                    refrescarBloque();
+                }
+            });
+            btnMenos.setFocusPainted(false);
+            btnMenos.addActionListener(e -> {
+                if (camposOpcion.size() > 2) {
+                    listaOpciones.remove(camposOpcion.remove(camposOpcion.size() - 1));
+                    refrescarBloque();
+                }
+            });
+            filaBtns.add(btnMas);
+            filaBtns.add(btnMenos);
+            add(Box.createVerticalStrut(4));
+            add(filaBtns);
+            refrescarBloque();
+        }
+
+        /** ¿QUÉ HACE? Agrega un campo de opción vacío a este bloque. */
+        private void agregarCampoOpcion() {
+            var campo = new JTextField();
+            campo.setFont(fuente(Font.PLAIN, 13));
+            campo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+            camposOpcion.add(campo);
+            listaOpciones.add(campo);
+            listaOpciones.add(Box.createVerticalStrut(4));
+        }
+
+        /** ¿QUÉ HACE? Actualiza botones (límites 2-10) y repinta el bloque. */
+        private void refrescarBloque() {
+            btnMas.setEnabled(camposOpcion.size() < 10);
+            btnMenos.setEnabled(camposOpcion.size() > 2);
+            revalidate();
+            repaint();
+        }
+
+        /** ¿QUÉ HACE? Pone el número visible ("Pregunta 1", "Pregunta 2"...). */
+        void setNumero(int n) {
+            etiquetaNum.setText("Pregunta " + n);
+        }
+
+        /** ¿QUÉ HACE? Devuelve el enunciado recortado ("" si está vacío). */
+        String enunciado() {
+            return campoEnunciado.getText().strip();
+        }
+
+        /**
+         * ¿QUÉ HACE? Devuelve los textos de opción recortados, SIN los vacíos.
+         * Así las casillas que se dejan en blanco no cuentan como opción.
+         */
+        List<String> opciones() {
+            var textos = new ArrayList<String>();
+            for (int i = 0; i < camposOpcion.size(); i++) {
+                String t = camposOpcion.get(i).getText().strip();
+                if (!t.isEmpty()) {
+                    textos.add(t);
+                }
+            }
+            return textos;
+        }
+    }
+
+    // ============================================================================
+    // 9) ARRANQUE DEL PROGRAMA (aspecto nativo + hilo seguro de Swing)
     // ============================================================================
 
     /**
