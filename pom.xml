@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.mycompany</groupId>
+  <artifactId>gestordeencuestas</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <!-- Codificación de los archivos fuente (acentos correctos en NetBeans). -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Versión de Java del proyecto: 25. -->
+    <maven.compiler.release>25</maven.compiler.release>
+    <!-- Clase que abre NetBeans al pulsar Run Project (F6): la ventana moderna. -->
+    <exec.mainClass>com.mycompany.gestordeencuestas.EncuestaGUI</exec.mainClass>
+  </properties>
+
+  <build>
+    <plugins>
+      <!-- Compila el código con Java 25. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <!-- Ejecuta las pruebas automáticas (cuando se agreguen). -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+      <!-- Al empaquetar el .jar, indica la clase principal (Run en NetBeans). -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.3.0</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.mycompany.gestordeencuestas.GestorDeEncuestas</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
