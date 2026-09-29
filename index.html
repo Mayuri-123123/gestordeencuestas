@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Encuestas Profesional</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Pantalla de Carga -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loader">
+            <div class="loader-icon">
+                <i class="fas fa-poll-h"></i>
+            </div>
+            <div class="loader-text">Cargando Gestor de Encuestas...</div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fondo Animado -->
+    <div class="animated-bg">
+        <div class="bg-shape shape-1"></div>
+        <div class="bg-shape shape-2"></div>
+        <div class="bg-shape shape-3"></div>
+        <div class="bg-shape shape-4"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-poll-h"></i>
+                <span>Gestor de Encuestas</span>
+            </div>
+            <nav class="main-nav">
+                <button class="nav-btn active" data-section="inicio">
+                    <i class="fas fa-home"></i>
+                    <span>Inicio</span>
+                </button>
+                <button class="nav-btn" data-section="crear">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Crear Encuesta</span>
+                </button>
+                <button class="nav-btn" data-section="responder">
+                    <i class="fas fa-edit"></i>
+                    <span>Responder</span>
+                </button>
+                <button class="nav-btn" data-section="resultados">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Resultados</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="main-content">
+        <!-- Sección Inicio -->
+        <section id="inicio" class="section active">
+            <div class="hero">
+                <h1 class="hero-title">
+                    <span class="title-line">Crea Encuestas</span>
+                    <span class="title-line highlight">Increíbles</span>
+                </h1>
+                <p class="hero-subtitle">Diseña, publica y analiza encuestas de forma rápida y profesional</p>
+                <div class="hero-actions">
+                    <button class="btn btn-primary btn-lg" onclick="navigateTo('crear')">
+                        <i class="fas fa-rocket"></i>
+                        Comenzar Ahora
+                    </button>
+                    <button class="btn btn-secondary btn-lg" onclick="navigateTo('responder')">
+                        <i class="fas fa-play"></i>
+                        Ver Encuestas
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card" style="--card-color: #667eea;">
+                    <div class="stat-icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="total-encuestas">0</span>
+                        <span class="stat-label">Encuestas Creadas</span>
+                    </div>
+                </div>
+                <div class="stat-card" style="--card-color: #764ba2;">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="total-respuestas">0</span>
+                        <span class="stat-label">Respuestas</span>
+                    </div>
+                </div>
+                <div class="stat-card" style="--card-color: #f093fb;">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="total-preguntas">0</span>
+                        <span class="stat-label">Preguntas</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="features-section">
+                <h2 class="section-title">¿Por qué usar nuestro Gestor?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-magic"></i>
+                        </div>
+                        <h3>Fácil de Usar</h3>
+                        <p>Interfaz intuitiva con animaciones que guían al usuario en cada paso</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-palette"></i>
+                        </div>
+                        <h3>Fondos Temáticos</h3>
+                        <p>Elige fondos según tu tipo de encuesta: comida, moda, belleza y más</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <h3>Resultados en Tiempo Real</h3>
+                        <p>Estadísticas actualizadas instantáneamente con gráficos interactivos</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3>100% Anónimo</h3>
+                        <p>Las respuestas son completamente anónimas, sin datos personales</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección Crear Encuesta -->
+        <section id="crear" class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-plus-circle"></i> Crear Nueva Encuesta</h2>
+                <p>Diseña tu encuenta con preguntas de opción única</p>
+            </div>
+
+            <div class="form-container">
+                <!-- Paso 1: Info Básica -->
+                <div class="form-step active" id="step-1">
+                    <div class="step-header">
+                        <span class="step-number">1</span>
+                        <h3>Información Básica</h3>
+                    </div>
+                    <div class="form-group">
+                        <label for="encuesta-titulo">
+                            <i class="fas fa-heading"></i> Título de la Encuesta
+                        </label>
+                        <input type="text" id="encuesta-titulo" placeholder="Ej: Preferencias de Comida 2024" class="form-input">
+                        <span class="input-hint">Un título claro ayuda a los usuarios a entender el tema</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="encuesta-descripcion">
+                            <i class="fas fa-align-left"></i> Descripción
+                        </label>
+                        <textarea id="encuesta-descripcion" placeholder="Describe brevemente el propósito de tu encuesta..." class="form-textarea" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-image"></i> Categoría (determina el fondo)
+                        </label>
+                        <div class="category-grid">
+                            <div class="category-card selected" data-category="comida" style="--cat-color: #ff6b6b;">
+                                <i class="fas fa-utensils"></i>
+                                <span>Comida</span>
+                            </div>
+                            <div class="category-card" data-category="productos" style="--cat-color: #4ecdc4;">
+                                <i class="fas fa-shopping-bag"></i>
+                                <span>Productos</span>
+                            </div>
+                            <div class="category-card" data-category="belleza" style="--cat-color: #ff69b4;">
+                                <i class="fas fa-spa"></i>
+                                <span>Belleza</span>
+                            </div>
+                            <div class="category-card" data-category="moda" style="--cat-color: #9b59b6;">
+                                <i class="fas fa-tshirt"></i>
+                                <span>Moda</span>
+                            </div>
+                            <div class="category-card" data-category="tecnologia" style="--cat-color: #3498db;">
+                                <i class="fas fa-laptop"></i>
+                                <span>Tecnología</span>
+                            </div>
+                            <div class="category-card" data-category="deportes" style="--cat-color: #2ecc71;">
+                                <i class="fas fa-futbol"></i>
+                                <span>Deportes</span>
+                            </div>
+                            <div class="category-card" data-category="viajes" style="--cat-color: #e67e22;">
+                                <i class="fas fa-plane"></i>
+                                <span>Viajes</span>
+                            </div>
+                            <div class="category-card" data-category="general" style="--cat-color: #95a5a6;">
+                                <i class="fas fa-globe"></i>
+                                <span>General</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" onclick="nextStep(2)">
+                            Siguiente <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Paso 2: Agregar Preguntas -->
+                <div class="form-step" id="step-2">
+                    <div class="step-header">
+                        <span class="step-number">2</span>
+                        <h3>Agregar Preguntas</h3>
+                    </div>
+                    <div id="preguntas-container">
+                        <!-- Las preguntas se agregan dinámicamente -->
+                    </div>
+                    <button class="btn btn-secondary" onclick="addPregunta()">
+                        <i class="fas fa-plus"></i> Agregar Pregunta
+                    </button>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" onclick="prevStep(1)">
+                            <i class="fas fa-arrow-left"></i> Anterior
+                        </button>
+                        <button class="btn btn-primary" onclick="nextStep(3)">
+                            Siguiente <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Paso 3: Revisar y Publicar -->
+                <div class="form-step" id="step-3">
+                    <div class="step-header">
+                        <span class="step-number">3</span>
+                        <h3>Revisar y Publicar</h3>
+                    </div>
+                    <div class="review-container" id="review-content">
+                        <!-- Resumen dinámico -->
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" onclick="prevStep(2)">
+                            <i class="fas fa-arrow-left"></i> Anterior
+                        </button>
+                        <button class="btn btn-success" onclick="publicarEncuesta()">
+                            <i class="fas fa-check-circle"></i> Publicar Encuesta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección Responder Encuesta -->
+        <section id="responder" class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-edit"></i> Responder Encuestas</h2>
+                <p>Selecciona una encuesta y comparte tu opinión</p>
+            </div>
+            <div class="encuestas-grid" id="encuestas-disponibles">
+                <!-- Encuestas disponibles se cargan dinámicamente -->
+            </div>
+        </section>
+
+        <!-- Sección Resultados -->
+        <section id="resultados" class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-chart-bar"></i> Resultados</h2>
+                <p>Visualiza las estadísticas de tus encuestas</p>
+            </div>
+            <div class="resultados-container" id="resultados-container">
+                <!-- Resultados se cargan dinámicamente -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Responder Encuesta -->
+    <div class="modal" id="modal-responder">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-titulo">Responder Encuesta</h3>
+                <button class="modal-close" onclick="closeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Contenido dinámico -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Resultados -->
+    <div class="modal" id="modal-resultados">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="resultados-titulo">Resultados</h3>
+                <button class="modal-close" onclick="closeResultadosModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="resultados-body">
+                <!-- Gráficos y estadísticas -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <p>&copy; 2024 Gestor de Encuestas - Proyecto Académico</p>
+    </footer>
+
+    <script src="js/encuestas.js"></script>
+    <script src="js/respuestas.js"></script>
+    <script src="js/integracion.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
