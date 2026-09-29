@@ -1,13 +1,12 @@
 package com.mycompany.gestordeencuestas;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * MÓDULO B - SERVICIO DE RESPUESTAS Y ESTADÍSTICAS
- * Responsable: Registro de respuestas y cálculo de estadísticas
+ * MODULO B - SERVICIO DE RESPUESTAS Y ESTADISTICAS
+ * Responsable: Registro de respuestas y calculo de estadisticas
  * Integrante: Yo (rama pruebas)
  */
 public class RespuestaService {
@@ -15,13 +14,13 @@ public class RespuestaService {
     private EncuestaService encuestaService;
 
     public RespuestaService(EncuestaService encuestaService) {
-        this.respuestas = new ArrayList<>();
+        this.respuestas = new ArrayList<Respuesta>();
         this.encuestaService = encuestaService;
     }
 
     /**
      * Registrar respuestas de una encuesta
-     * Validación: todas las preguntas deben tener respuesta (evita respuestas parciales)
+     * Validacion: todas las preguntas deben tener respuesta (evita respuestas parciales)
      */
     public void registrarRespuestas(String encuestaId, Map<String, Integer> respuestasMap) throws Exception {
         Encuesta encuesta = encuestaService.obtenerEncuestaPorId(encuestaId);
@@ -30,11 +29,11 @@ public class RespuestaService {
         }
 
         if (!encuesta.isPublicada()) {
-            throw new Exception("La encuesta no está publicada");
+            throw new Exception("La encuesta no esta publicada");
         }
 
-        // Validación: verificar que todas las preguntas tengan respuesta
-        List<String> preguntasIds = new ArrayList<>();
+        // Validacion: verificar que todas las preguntas tengan respuesta
+        List<String> preguntasIds = new ArrayList<String>();
         for (Pregunta p : encuesta.getPreguntas()) {
             preguntasIds.add(p.getId());
         }
@@ -43,14 +42,14 @@ public class RespuestaService {
             throw new Exception("Debes responder todas las preguntas antes de enviar");
         }
 
-        // Validación: verificar que las opciones sean válidas
+        // Validacion: verificar que las opciones sean validas
         for (Pregunta pregunta : encuesta.getPreguntas()) {
             Integer opcionIndex = respuestasMap.get(pregunta.getId());
             if (opcionIndex == null) {
                 throw new Exception("La pregunta '" + pregunta.getTexto() + "' no tiene respuesta");
             }
             if (opcionIndex < 0 || opcionIndex >= pregunta.getOpciones().size()) {
-                throw new Exception("Opción inválida para la pregunta '" + pregunta.getTexto() + "'");
+                throw new Exception("Opcion invalida para la pregunta '" + pregunta.getTexto() + "'");
             }
         }
 
@@ -65,7 +64,7 @@ public class RespuestaService {
      * Obtener respuestas por encuesta
      */
     public List<Respuesta> obtenerRespuestasPorEncuesta(String encuestaId) {
-        List<Respuesta> resultado = new ArrayList<>();
+        List<Respuesta> resultado = new ArrayList<Respuesta>();
         for (Respuesta r : respuestas) {
             if (r.getEncuestaId().equals(encuestaId)) {
                 resultado.add(r);
@@ -75,8 +74,8 @@ public class RespuestaService {
     }
 
     /**
-     * Calcular estadísticas de una encuesta
-     * Retorna porcentajes por opción para cada pregunta
+     * Calcular estadisticas de una encuesta
+     * Retorna porcentajes por opcion para cada pregunta
      */
     public List<EstadisticaPregunta> calcularEstadisticas(String encuestaId) throws Exception {
         Encuesta encuesta = encuestaService.obtenerEncuestaPorId(encuestaId);
@@ -85,13 +84,13 @@ public class RespuestaService {
         }
 
         List<Respuesta> respuestasEncuesta = obtenerRespuestasPorEncuesta(encuestaId);
-        List<EstadisticaPregunta> estadisticas = new ArrayList<>();
+        List<EstadisticaPregunta> estadisticas = new ArrayList<EstadisticaPregunta>();
 
         for (Pregunta pregunta : encuesta.getPreguntas()) {
             EstadisticaPregunta stat = new EstadisticaPregunta(pregunta.getTexto());
             int totalRespuestas = 0;
 
-            // Contar respuestas por opción
+            // Contar respuestas por opcion
             for (int i = 0; i < pregunta.getOpciones().size(); i++) {
                 int count = 0;
                 for (Respuesta r : respuestasEncuesta) {
@@ -100,7 +99,7 @@ public class RespuestaService {
                     }
                 }
                 totalRespuestas += count;
-                stat.agregarOpcion Estadistica(pregunta.getOpciones().get(i), count);
+                stat.agregarOpcionEstadistica(pregunta.getOpciones().get(i), count);
             }
 
             // Calcular porcentajes
@@ -119,7 +118,7 @@ public class RespuestaService {
     }
 
     /**
-     * Clase interna para estadísticas de una pregunta
+     * Clase interna para estadisticas de una pregunta
      */
     public static class EstadisticaPregunta {
         private String pregunta;
@@ -127,7 +126,7 @@ public class RespuestaService {
 
         public EstadisticaPregunta(String pregunta) {
             this.pregunta = pregunta;
-            this.opciones = new ArrayList<>();
+            this.opciones = new ArrayList<OpcionEstadistica>();
         }
 
         public void agregarOpcionEstadistica(String opcion, int count) {
@@ -145,7 +144,7 @@ public class RespuestaService {
     }
 
     /**
-     * Clase interna para estadísticas de una opción
+     * Clase interna para estadisticas de una opcion
      */
     public static class OpcionEstadistica {
         private String opcion;
