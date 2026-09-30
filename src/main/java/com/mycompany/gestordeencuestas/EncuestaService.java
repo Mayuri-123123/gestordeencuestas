@@ -48,7 +48,12 @@ public final class EncuestaService {
      * @return la encuesta creada (en BORRADOR, lista para agregar preguntas)
      */
     public Encuesta crearEncuesta(String titulo) {
-        var encuesta = Encuesta.nueva(titulo);
+        return crearEncuesta(titulo, "General");
+    }
+
+    /** Crea una encuesta nueva con el tema indicado. */
+    public Encuesta crearEncuesta(String titulo, String tema) {
+        var encuesta = Encuesta.nueva(titulo, tema);
         encuestas.put(encuesta.id(), encuesta);
         return encuesta;
     }

@@ -21,6 +21,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -151,8 +152,9 @@ public class EncuestaGUI extends JFrame {
         var titulo = new JLabel("Gestor de Encuestas");
         titulo.setFont(fuente(Font.BOLD, 21));
         titulo.setForeground(TEXTO);
-        // Subtítulo con el formulario ACTIVO (se actualiza al crear uno propio).
-        var subtitulo = new JLabel("Panel de control  ·  " + tituloCorto() + "  ·  Java 25");
+        // Subtítulo con el formulario activo y su tema.
+        var subtitulo = new JLabel("Panel de control  ·  " + tituloCorto()
+                + "  ·  " + encuesta.tema() + "  ·  Java 25");
         subtitulo.setFont(fuente(Font.PLAIN, 12));
         subtitulo.setForeground(TEXTO_SUAVE);
         var textos = new JPanel(new GridLayout(2, 1, 0, 2));
@@ -309,6 +311,13 @@ public class EncuestaGUI extends JFrame {
         var vista = new JPanel();
         vista.setBackground(FONDO_APP);
         vista.setLayout(new BoxLayout(vista, BoxLayout.Y_AXIS));
+
+        var tema = new JLabel("Tema: " + encuesta.tema());
+        tema.setFont(fuente(Font.BOLD, 13));
+        tema.setForeground(ACENTO);
+        tema.setAlignmentX(Component.LEFT_ALIGNMENT);
+        vista.add(tema);
+        vista.add(Box.createVerticalStrut(12));
 
         var preguntas = encuesta.preguntas();
         if (preguntas.isEmpty()) {
@@ -795,8 +804,8 @@ public class EncuestaGUI extends JFrame {
         dialogo.setLocationRelativeTo(this);
         dialogo.setLayout(new BorderLayout());
 
-        // ---- Arriba: título del nuevo formulario ----
-        var norte = new JPanel(new BorderLayout(0, 4));
+        // ---- Arriba: título y tema del nuevo formulario ----
+        var norte = new JPanel(new GridLayout(2, 2, 8, 4));
         norte.setBackground(FONDO_TARJETA);
         norte.setBorder(BorderFactory.createEmptyBorder(14, 16, 10, 16));
         var etTitulo = new JLabel("Título del formulario");
@@ -804,8 +813,19 @@ public class EncuestaGUI extends JFrame {
         etTitulo.setForeground(TEXTO);
         var campoTitulo = new JTextField();
         campoTitulo.setFont(fuente(Font.PLAIN, 14));
-        norte.add(etTitulo, BorderLayout.NORTH);
-        norte.add(campoTitulo, BorderLayout.CENTER);
+        var etTema = new JLabel("Tema");
+        etTema.setFont(fuente(Font.BOLD, 14));
+        etTema.setForeground(TEXTO);
+        var campoTema = new JComboBox<>(new String[]{
+            "General", "Educación", "Salud", "Tecnología", "Medio ambiente",
+            "Trabajo", "Entretenimiento"
+        });
+        campoTema.setEditable(true);
+        campoTema.setFont(fuente(Font.PLAIN, 14));
+        norte.add(etTitulo);
+        norte.add(etTema);
+        norte.add(campoTitulo);
+        norte.add(campoTema);
         dialogo.add(norte, BorderLayout.NORTH);
 
         // ---- Centro: bloques de preguntas (con scroll si hay muchas) ----
@@ -854,7 +874,8 @@ public class EncuestaGUI extends JFrame {
         publicar.setFocusPainted(false);
         publicar.setContentAreaFilled(false); // contraste garantizado (ver Enviar)
         publicar.setOpaque(true);
-        publicar.addActionListener(e -> publicarFormularioPropio(dialogo, campoTitulo, bloques));
+        publicar.addActionListener(e -> publicarFormularioPropio(dialogo, campoTitulo,
+                String.valueOf(campoTema.getEditor().getItem()).strip(), bloques));
         botones.add(cancelar);
         botones.add(publicar);
         sur.add(agregar, BorderLayout.WEST);
@@ -889,7 +910,7 @@ public class EncuestaGUI extends JFrame {
      * el formulario activo (todo o nada).
      */
     private void publicarFormularioPropio(JDialog dialogo, JTextField campoTitulo,
-                                          List<BloquePregunta> bloques) {
+                                          String tema, List<BloquePregunta> bloques) {
         String titulo = campoTitulo.getText().strip();
         if (titulo.isEmpty()) {
             avisar(dialogo, "Escribe el título del formulario.");
@@ -912,7 +933,7 @@ public class EncuestaGUI extends JFrame {
         }
         // Capa 2 (servicios): crean y publican aplicando las reglas del dominio.
         try {
-            var nueva = service.crearEncuesta(titulo);
+            var nueva = service.crearEncuesta(titulo, tema);
             for (var d : datos) {
                 service.agregarPregunta(nueva.id(), d.getKey(), d.getValue());
             }

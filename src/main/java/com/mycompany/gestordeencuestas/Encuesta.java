@@ -33,35 +33,50 @@ public final class Encuesta {
     // ---- Datos internos (nadie los toca directamente desde fuera) ----
     private final UUID id;                 // Identificador único de la encuesta
     private final String titulo;           // Título visible, ej: "Hábitos de estudio"
+    private final String tema;             // Categoría elegida para la encuesta
     private volatile EstadoEncuesta estado; // Estado actual (empieza en BORRADOR)
     private final List<Pregunta> preguntas = new ArrayList<>();   // Cuestionario
     private final List<Respuesta> respuestas = new ArrayList<>(); // Respuestas anónimas
 
     /**
-     * Crea una encuesta nueva (siempre nace en BORRADOR y sin preguntas).
+     * Crea una encuesta nueva en BORRADOR con el tema General.
      *
-     * @param id     identificador (lo genera el sistema)
+     * @param id identificador generado por el sistema
      * @param titulo título visible (no vacío, máx. 150 caracteres)
      */
     public Encuesta(UUID id, String titulo) {
+        this(id, titulo, "General");
+    }
+
+    /** Crea una encuesta nueva con su tema elegido. */
+    public Encuesta(UUID id, String titulo, String tema) {
         this.id = Objects.requireNonNull(id, "id no puede ser null");
         Objects.requireNonNull(titulo, "titulo no puede ser null");
+        Objects.requireNonNull(tema, "tema no puede ser null");
         String limpio = titulo.strip();
+        String temaLimpio = tema.strip();
         if (limpio.isEmpty()) {
             throw new IllegalArgumentException("titulo no puede estar vacío");
         }
         if (limpio.length() > 150) {
             throw new IllegalArgumentException("titulo supera 150 caracteres");
         }
+        if (temaLimpio.isEmpty() || temaLimpio.length() > 60) {
+            throw new IllegalArgumentException("tema debe tener entre 1 y 60 caracteres");
+        }
         this.titulo = limpio;
+        this.tema = temaLimpio;
         this.estado = EstadoEncuesta.BORRADOR;
     }
 
-    /**
-     * Forma RECOMENDADA de crear una encuesta: solo das el título.
-     */
+    /** Forma recomendada de crear una encuesta con el tema General. */
     public static Encuesta nueva(String titulo) {
-        return new Encuesta(UUID.randomUUID(), titulo);
+        return nueva(titulo, "General");
+    }
+
+    /** Forma recomendada de crear una encuesta con el tema elegido. */
+    public static Encuesta nueva(String titulo, String tema) {
+        return new Encuesta(UUID.randomUUID(), titulo, tema);
     }
 
     /** Identificador único de la encuesta. */
@@ -72,6 +87,11 @@ public final class Encuesta {
     /** Título visible de la encuesta. */
     public String titulo() {
         return titulo;
+    }
+
+    /** Tema o categoría elegida para la encuesta. */
+    public String tema() {
+        return tema;
     }
 
     /** Estado actual: BORRADOR, PUBLICADA o CERRADA. */
