@@ -106,6 +106,10 @@ public class EncuestaGUI extends JFrame {
     private final List<ButtonGroup> grupos = new ArrayList<>();          // 1 grupo por pregunta
     private final List<List<JRadioButton>> botonesPorPregunta = new ArrayList<>();
 
+    // ================= Barra de progreso de llenado en vivo =================
+    private BarraProgresoLlenado barraProgresoLlenado;
+    private JLabel etiquetaProgresoPorcentaje;
+
     /** Arma la ventana completa y muestra la vista de votar. */
     public EncuestaGUI() {
         super("Gestor de Encuestas — Panel de control");
@@ -315,36 +319,64 @@ public class EncuestaGUI extends JFrame {
             vista.add(tarjetaAviso("Esta encuesta aún no tiene preguntas."));
             return vista;
         }
+
+        // Barra de progreso interactiva de llenado en tiempo real
+        vista.add(crearTarjetaProgresoLlenado());
+        vista.add(Box.createVerticalStrut(14));
+
         // Una tarjeta por pregunta (índice protegido: se usa la lista local).
         for (int i = 0; i < preguntas.size(); i++) {
             vista.add(tarjetaPregunta(preguntas.get(i), i + 1));
             vista.add(Box.createVerticalStrut(14));
         }
 
+        // Fila de acciones (Enviar voto + Limpiar selecciones)
+        var panelAcciones = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        panelAcciones.setOpaque(false);
+        panelAcciones.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         var enviar = new JButton("Enviar respuesta anónima");
         enviar.setFont(fuente(Font.BOLD, 15));
         enviar.setBackground(BOTON_FONDO); // azul oscuro: blanco encima = 5.5:1
         enviar.setForeground(Color.WHITE);
         enviar.setFocusPainted(false);
-        // CONTRASTE (causa raíz del reporte): con el Look & Feel nativo de
-        // Windows, el fondo propio de un JButton se IGNORA y se pinta gris
-        // claro, dejando el texto blanco ilegible. Desactivar el pintado del
-        // L&F + hacerlo opaco obliga a usar NUESTRO fondo oscuro. Sin esto,
-        // ningún color de fondo sirve.
+        // CONTRASTE: garantiza que el botón se pinte con nuestro color oscuro
         enviar.setContentAreaFilled(false);
         enviar.setOpaque(true);
         enviar.setBorder(BorderFactory.createEmptyBorder(12, 20, 12, 20));
-        enviar.setAlignmentX(Component.LEFT_ALIGNMENT);
         enviar.setMaximumSize(new Dimension(340, 52));
         // Al pulsar: valida que todo esté respondido y registra el voto.
         enviar.addActionListener(e -> enviarVoto());
-        vista.add(enviar);
-        vista.add(Box.createVerticalStrut(6));
+
+        var limpiar = new JButton("Limpiar respuestas");
+        limpiar.setFont(fuente(Font.PLAIN, 13));
+        limpiar.setBackground(FONDO_TARJETA);
+        limpiar.setForeground(TEXTO_SUAVE);
+        limpiar.setFocusPainted(false);
+        limpiar.setContentAreaFilled(false);
+        limpiar.setOpaque(true);
+        limpiar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDE),
+                BorderFactory.createEmptyBorder(11, 16, 11, 16)));
+        limpiar.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        limpiar.addActionListener(e -> {
+            grupos.forEach(ButtonGroup::clearSelection);
+            actualizarProgresoLlenado();
+            mensaje("Respuestas limpiadas. Progreso restablecido a 0%.");
+        });
+
+        panelAcciones.add(enviar);
+        panelAcciones.add(limpiar);
+        vista.add(panelAcciones);
+        vista.add(Box.createVerticalStrut(8));
+
         var ayuda = new JLabel("No se pide ni se guarda ningún dato personal: el voto es anónimo por diseño.");
         ayuda.setFont(fuente(Font.ITALIC, 12));
         ayuda.setForeground(TEXTO_SUAVE);
         vista.add(ayuda);
         getRootPane().setDefaultButton(enviar); // Enter también envía
+
+        actualizarProgresoLlenado();
         return vista;
     }
 
@@ -378,6 +410,8 @@ public class EncuestaGUI extends JFrame {
             radio.setForeground(TEXTO);
             radio.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
             radio.putClientProperty("opcionId", opcion.id()); // id seguro, invisible
+            // Al hacer clic, actualiza la barra de progreso en vivo de inmediato
+            radio.addActionListener(e -> actualizarProgresoLlenado());
             grupo.add(radio);
             tarjeta.add(radio);
             botones.add(radio);
@@ -386,6 +420,75 @@ public class EncuestaGUI extends JFrame {
         botonesPorPregunta.add(botones);
         tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, tarjeta.getPreferredSize().height + 40));
         return tarjeta;
+    }
+
+    /**
+     * ¿QUÉ HACE? Crea la tarjeta superior de progreso en tiempo real con
+     * título, porcentaje dinámico y barra de avance coloreada.
+     */
+    private JComponent crearTarjetaProgresoLlenado() {
+        var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
+        tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
+        tarjeta.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDE),
+                BorderFactory.createEmptyBorder(12, 18, 12, 18)));
+
+        var cabecera = new JPanel(new BorderLayout());
+        cabecera.setOpaque(false);
+
+        var tituloProgreso = new JLabel("📝 Progreso de llenado");
+        tituloProgreso.setFont(fuente(Font.BOLD, 13));
+        tituloProgreso.setForeground(TEXTO);
+
+        int total = (encuesta == null || encuesta.preguntas() == null) ? 0 : encuesta.preguntas().size();
+        etiquetaProgresoPorcentaje = new JLabel("0 de " + total + " respondidas (0%)");
+        etiquetaProgresoPorcentaje.setFont(fuente(Font.BOLD, 13));
+        etiquetaProgresoPorcentaje.setForeground(TEXTO_SUAVE);
+
+        cabecera.add(tituloProgreso, BorderLayout.WEST);
+        cabecera.add(etiquetaProgresoPorcentaje, BorderLayout.EAST);
+
+        barraProgresoLlenado = new BarraProgresoLlenado();
+
+        tarjeta.add(cabecera);
+        tarjeta.add(Box.createVerticalStrut(8));
+        tarjeta.add(barraProgresoLlenado);
+        tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
+        return tarjeta;
+    }
+
+    /**
+     * ¿QUÉ HACE? Recalcula cuántas preguntas han sido respondidas y actualiza
+     * en tiempo real la barra gráfica y los textos informativos.
+     */
+    private void actualizarProgresoLlenado() {
+        if (barraProgresoLlenado == null || etiquetaProgresoPorcentaje == null) {
+            return;
+        }
+        int total = (encuesta == null || encuesta.preguntas() == null) ? 0 : encuesta.preguntas().size();
+        if (total == 0) {
+            etiquetaProgresoPorcentaje.setText("Sin preguntas");
+            barraProgresoLlenado.setProgreso(0);
+            return;
+        }
+        int respondidas = 0;
+        for (var grupo : grupos) {
+            if (grupo.getSelection() != null) {
+                respondidas++;
+            }
+        }
+        double pct = (respondidas * 100.0) / total;
+        barraProgresoLlenado.setProgreso(pct);
+
+        if (respondidas == total) {
+            etiquetaProgresoPorcentaje.setText("✓ " + respondidas + " de " + total + " respondidas (100%) — ¡Listo para enviar!");
+            etiquetaProgresoPorcentaje.setForeground(VERDE);
+            mensaje("✓ Formulario completado al 100%. Ya puedes pulsar 'Enviar respuesta anónima'.");
+        } else {
+            etiquetaProgresoPorcentaje.setText(respondidas + " de " + total + " respondidas (" + (int) Math.round(pct) + "%)");
+            etiquetaProgresoPorcentaje.setForeground(TEXTO_SUAVE);
+            mensaje("Has respondido " + respondidas + " de " + total + " preguntas.");
+        }
     }
 
     // ============================================================================
@@ -558,6 +661,7 @@ public class EncuestaGUI extends JFrame {
         try {
             service.responder(encuesta.id(), seleccion); // validación estricta aquí
             grupos.forEach(g -> g.clearSelection());    // limpia para el siguiente votante
+            actualizarProgresoLlenado();
             refrescarResultados();
             mostrarCarta(VISTA_RESULTADOS);
             navResultados.setSelected(true);
@@ -763,6 +867,64 @@ public class EncuestaGUI extends JFrame {
                 relleno = Math.clamp(relleno, 0, w);
                 if (relleno > 0 && h > 0) {
                     g2.setColor(ACENTO);
+                    g2.fillRoundRect(0, 0, relleno, h, radio, radio);
+                }
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
+    /**
+     * ¿QUÉ ES? Barra de progreso interactiva del llenado de la encuesta en tiempo real.
+     * ¿PARA QUÉ? Proporciona feedback visual inmediato mientras el usuario
+     * va respondiendo las preguntas (cambia a verde esmeralda al completarse).
+     */
+    private static final class BarraProgresoLlenado extends JComponent {
+        private double porcentaje = 0.0;
+        private Color colorActual = ACENTO;
+
+        BarraProgresoLlenado() {
+            setPreferredSize(new Dimension(10, 10));
+            setMinimumSize(new Dimension(10, 10));
+            var acc = getAccessibleContext();
+            if (acc != null) {
+                acc.setAccessibleName("Barra de progreso de llenado");
+            }
+        }
+
+        void setProgreso(double valor) {
+            if (Double.isNaN(valor) || Double.isInfinite(valor)) {
+                valor = 0.0;
+            }
+            this.porcentaje = Math.clamp(valor, 0.0, 100.0);
+            this.colorActual = (this.porcentaje >= 100.0) ? VERDE : ACENTO;
+            var acc = getAccessibleContext();
+            if (acc != null) {
+                acc.setAccessibleDescription("%.1f por ciento completado".formatted(porcentaje));
+            }
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            var g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = Math.max(0, getWidth());
+                int h = Math.max(0, getHeight());
+                int radio = Math.clamp(h, 0, 20);
+
+                // 1) Pista gris clara
+                g2.setColor(PISTA_BARRA);
+                g2.fillRoundRect(0, 0, w, h, radio, radio);
+
+                // 2) Avance proporcional (azul durante el llenado, verde al completar)
+                int relleno = (int) Math.round(w * (porcentaje / 100.0));
+                relleno = Math.clamp(relleno, 0, w);
+                if (relleno > 0 && h > 0) {
+                    g2.setColor(colorActual);
                     g2.fillRoundRect(0, 0, relleno, h, radio, radio);
                 }
             } finally {
