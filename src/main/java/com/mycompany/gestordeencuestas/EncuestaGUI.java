@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -11,6 +12,13 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +31,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -39,74 +48,73 @@ import javax.swing.UIManager;
 // ¿PARA QUÉ SIRVE ESTE ARCHIVO?
 // ----------------------------------------------------------------------------
 // Es la VENTANA GRÁFICA del programa con estilo de panel de control moderno:
-// barra lateral de navegación, tarjetas (cards) blancas con bordes
-// redondeados, tipografía clara y gráficos de resultados dibujados a medida.
-// Tiene 3 funciones: "Votar" (voto anónimo), "Resultados" (barras en vivo)
-// y "+ Crear formulario" (el usuario arma su propia encuesta: título,
-// preguntas y opciones, que se publica con las mismas reglas de siempre).
+// barra lateral de navegación, tarjetas blancas con bordes redondeados,
+// tipografía clara y gráficos de resultados dibujados a medida con colores.
+// Funciones:
+// 1. "Votar": formulario con barra de progreso en vivo, bienvenida y limpieza.
+// 2. "Resultados": gráficos con paleta multicolor, porcentajes y exportador.
+// 3. "+ Crear formulario": asistente para publicar nuevas encuestas.
+// 4. "Enviar otra respuesta": reiniciar la vista de votar cómodamente.
 // ----------------------------------------------------------------------------
-// CONTRASTE: los botones de color desactivan el pintado del Look & Feel
-// nativo (que si no los dejaba grises con texto ilegible) y usan fondos
-// oscuros verificados (blanco sobre #1E6EA6 = 5.5:1, sobre #1E8449 = 4.7:1).
-// ----------------------------------------------------------------------------
-// NOTA DE ROBUSTEZ: esta versión NO usa JProgressBar. Las barras son el
-// componente BarraResultado (dibujado manualmente con valores limitados
-// entre 0 y 100 mediante Math.clamp), por lo que la familia de errores
-// "rango inválido" de los modelos de rango de Swing ya no puede ocurrir.
-// Además, todo acceso por índice está protegido por su tamaño.
-// ----------------------------------------------------------------------------
-// REGLAS INTACTAS: la ventana solo habla con EncuestaService, así que la
-// Regla 1 (publicada no cambia), la Regla 2 (opción válida o rechazo) y la
-// Regla 3 (anonimato total, sin pedir datos personales) siguen vigentes.
-// ----------------------------------------------------------------------------
-// ¿CÓMO EJECUTARLO? En NetBeans: clic derecho aquí -> Run File (Mayús+F6),
-// o pulsa F6 (Run Project): este proyecto ya trae nbactions.xml que abre
-// directamente esta ventana.
+// TIPOGRAFÍA LIMPIA: utiliza fuentes del sistema (Segoe UI) y símbolos seguros
+// para evitar caracteres no compatibles (cuadros vacíos) en Windows.
 // ============================================================================
 
 /**
  * Panel de control moderno del Gestor de Encuestas: voto anónimo, resultados
- * en vivo y creador de formularios propios.
+ * interactivos en vivo y creador de formularios.
  */
 public class EncuestaGUI extends JFrame {
 
-    // ================= Paleta del diseño (tema claro minimalista) =================
+    // ================= Paleta del diseño (tema claro moderno) =================
     private static final Color FONDO_APP = new Color(241, 244, 249); // gris azulado claro
     private static final Color FONDO_TARJETA = Color.WHITE;          // tarjetas blancas
     private static final Color LATERAL = new Color(22, 35, 58);      // azul noche (sidebar)
     private static final Color LATERAL_SEL = new Color(41, 128, 185);// acento al seleccionar
-    private static final Color ACENTO = new Color(41, 128, 185);     // azul barras y detalles
-    // Fondos de BOTONES (más oscuros que ACENTO a propósito): con texto blanco
-    // dan contraste 5.5:1 (BOTON_FONDO) y 4.7:1 (VERDE_OSCURO), ambos aptos AA.
+    private static final Color ACENTO = new Color(41, 128, 185);     // azul principal
+
+    // Fondos de botones con contraste garantizado
     private static final Color BOTON_FONDO = new Color(30, 110, 166); // azul oscuro: Enviar + nav activa
     private static final Color VERDE_OSCURO = new Color(30, 132, 73); // verde oscuro: Crear formulario
-    private static final Color VERDE = new Color(39, 174, 96);       // sello "anónimo"
+    private static final Color VERDE = new Color(39, 174, 96);       // sello "anónimo" y 100% completado
     private static final Color TEXTO = new Color(33, 43, 61);        // texto principal
     private static final Color TEXTO_SUAVE = new Color(120, 134, 155);// texto secundario
     private static final Color BORDE = new Color(226, 232, 240);     // bordes sutiles
     private static final Color PISTA_BARRA = new Color(230, 236, 243);// fondo de las barras
 
-    // Nombres de las vistas del panel central (CardLayout = "baraja de vistas").
+    // Paleta multicolor para las barras de resultados de opciones
+    private static final Color[] PALETA_RESULTADOS = {
+        new Color(37, 99, 235),  // Azul vibrante
+        new Color(16, 185, 129), // Verde esmeralda
+        new Color(139, 92, 246), // Violeta / Púrpura
+        new Color(245, 158, 11), // Ámbar / Naranja
+        new Color(14, 165, 233), // Celeste
+        new Color(236, 72, 153), // Rosa
+        new Color(99, 102, 241)  // Índigo
+    };
+
+    // Nombres de las vistas del panel central (CardLayout).
     private static final String VISTA_VOTAR = "VOTAR";
     private static final String VISTA_RESULTADOS = "RESULTADOS";
 
-    // ================= Lógica del negocio (la ventana no toca datos directo) =================
+    // ================= Lógica del negocio =================
     private final EncuestaService service = new EncuestaService();
-    private Encuesta encuesta; // encuesta de demostración, siempre PUBLICADA
+    private Encuesta encuesta; // encuesta activa en pantalla
 
-    // ================= Componentes vivos (se actualizan al votar) =================
+    // ================= Componentes vivos =================
     private final CardLayout cartas = new CardLayout();
-    private JPanel panelCentral;                 // contenedor de las 2 vistas
-    private JPanel vistaVotar;                   // formulario de voto
-    private JPanel vistaResultados;              // gráficos de resultados
-    private JToggleButton navVotar;              // botón lateral "Votar"
-    private JToggleButton navResultados;         // botón lateral "Resultados"
-    private JLabel etiquetaTotal;                // "N respuestas" (sidebar + resumen)
-    private JLabel etiquetaEstado;               // barra inferior de mensajes
-    private final List<ButtonGroup> grupos = new ArrayList<>();          // 1 grupo por pregunta
+    private JPanel panelCentral;
+    private JPanel vistaVotar;
+    private JPanel vistaResultados;
+    private JToggleButton navVotar;
+    private JToggleButton navResultados;
+    private JLabel etiquetaTotal;
+    private JLabel etiquetaEstado;
+    private boolean recienVotado = false;
+    private final List<ButtonGroup> grupos = new ArrayList<>();
     private final List<List<JRadioButton>> botonesPorPregunta = new ArrayList<>();
 
-    // ================= Barra de progreso de llenado en vivo =================
+    // Componentes de la barra de progreso de llenado en vivo
     private BarraProgresoLlenado barraProgresoLlenado;
     private JLabel etiquetaProgresoPorcentaje;
 
@@ -115,8 +123,8 @@ public class EncuestaGUI extends JFrame {
         super("Gestor de Encuestas — Panel de control");
         cargarDemo(); // encuesta publicada con 2 preguntas + 3 votos de ejemplo
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(960, 640));
-        setSize(1100, 700);
+        setMinimumSize(new Dimension(980, 660));
+        setSize(1100, 720);
         setLocationRelativeTo(null); // centrar en la pantalla
         armarContenido();
     }
@@ -125,11 +133,8 @@ public class EncuestaGUI extends JFrame {
     // 1) CONSTRUCCIÓN DE LA VENTANA (encabezado + lateral + centro + estado)
     // ============================================================================
 
-    /**
-     * ¿QUÉ HACE? Coloca las 4 zonas de la ventana. Se usa al abrir y al
-     * reiniciar la demo, para no duplicar código.
-     */
     private void armarContenido() {
+        recienVotado = false;
         getContentPane().removeAll();
         getContentPane().setLayout(new BorderLayout());
         getContentPane().add(crearEncabezado(), BorderLayout.NORTH);
@@ -141,10 +146,6 @@ public class EncuestaGUI extends JFrame {
         repaint();
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la franja superior: título a la izquierda y, a la
-     * derecha, el sello verde "100% ANÓNIMO" + contador de respuestas.
-     */
     private JComponent crearEncabezado() {
         var panel = new JPanel(new BorderLayout());
         panel.setBackground(FONDO_TARJETA);
@@ -155,7 +156,7 @@ public class EncuestaGUI extends JFrame {
         var titulo = new JLabel("Gestor de Encuestas");
         titulo.setFont(fuente(Font.BOLD, 21));
         titulo.setForeground(TEXTO);
-        // Subtítulo con el formulario ACTIVO (se actualiza al crear uno propio).
+
         var subtitulo = new JLabel("Panel de control  ·  " + tituloCorto() + "  ·  Java 25");
         subtitulo.setFont(fuente(Font.PLAIN, 12));
         subtitulo.setForeground(TEXTO_SUAVE);
@@ -164,7 +165,7 @@ public class EncuestaGUI extends JFrame {
         textos.add(titulo);
         textos.add(subtitulo);
 
-        // Sello verde tipo "píldora": comunica el anonimato de un vistazo.
+        // Sello verde estilo píldora
         var sello = new RoundedPanel(18, new Color(232, 248, 240));
         sello.setBorder(BorderFactory.createEmptyBorder(6, 14, 6, 14));
         var selloTxt = new JLabel("● 100% ANÓNIMO");
@@ -180,10 +181,6 @@ public class EncuestaGUI extends JFrame {
         return panel;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la barra lateral oscura con la navegación (Votar /
-     * Resultados), el contador de votos y el botón de reiniciar demo.
-     */
     private JComponent crearLateral() {
         var lateral = new JPanel();
         lateral.setBackground(LATERAL);
@@ -194,7 +191,6 @@ public class EncuestaGUI extends JFrame {
         lateral.add(etiquetaLateral("MENÚ"));
         lateral.add(Box.createVerticalStrut(8));
 
-        // Grupo: solo una vista activa a la vez (como pestañas).
         var grupoNav = new ButtonGroup();
         navVotar = botonLateral("Votar", true);
         navResultados = botonLateral("Resultados", false);
@@ -202,15 +198,14 @@ public class EncuestaGUI extends JFrame {
         grupoNav.add(navResultados);
         navVotar.addActionListener(e -> mostrarCarta(VISTA_VOTAR));
         navResultados.addActionListener(e -> {
-            refrescarResultados(); // siempre dibuja datos frescos
+            refrescarResultados();
             mostrarCarta(VISTA_RESULTADOS);
         });
         lateral.add(navVotar);
         lateral.add(Box.createVerticalStrut(6));
         lateral.add(navResultados);
         lateral.add(Box.createVerticalStrut(6));
-        // NUEVO: botón para crear un formulario propio (título + preguntas +
-        // opciones). Verde oscuro para distinguirlo de la navegación.
+
         var crear = botonAccionLateral("+ Crear formulario", VERDE_OSCURO);
         crear.addActionListener(e -> abrirCreadorFormulario());
         lateral.add(crear);
@@ -218,7 +213,7 @@ public class EncuestaGUI extends JFrame {
 
         lateral.add(etiquetaLateral("ACTIVIDAD"));
         lateral.add(Box.createVerticalStrut(8));
-        // Tarjetita con el total de respuestas anónimas registradas.
+
         var mini = new RoundedPanel(14, new Color(33, 50, 80));
         mini.setLayout(new GridLayout(2, 1, 0, 2));
         mini.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
@@ -233,17 +228,16 @@ public class EncuestaGUI extends JFrame {
         mini.setMaximumSize(new Dimension(220, 80));
         lateral.add(mini);
 
-        lateral.add(Box.createVerticalGlue()); // empuja lo siguiente al fondo
+        lateral.add(Box.createVerticalGlue());
         var reiniciar = new JButton("Reiniciar demo");
         reiniciar.setFocusPainted(false);
         reiniciar.setFont(fuente(Font.PLAIN, 12));
         reiniciar.setForeground(new Color(200, 214, 232));
         reiniciar.setBackground(new Color(33, 50, 80));
         reiniciar.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-        // CONTRASTE: garantiza que el fondo oscuro se pinte (ver Enviar).
         reiniciar.setContentAreaFilled(false);
         reiniciar.setOpaque(true);
-        // Restaura la encuesta de ejemplo con sus 3 votos iniciales.
+        reiniciar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         reiniciar.addActionListener(e -> {
             cargarDemo();
             grupos.clear();
@@ -262,10 +256,6 @@ public class EncuestaGUI extends JFrame {
         return lateral;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea el área central con las 2 vistas (votar y resultados).
-     * CardLayout muestra UNA a la vez, como un mazo de cartas.
-     */
     private JComponent crearCentro() {
         panelCentral = new JPanel(cartas);
         panelCentral.setBackground(FONDO_APP);
@@ -281,10 +271,6 @@ public class EncuestaGUI extends JFrame {
         return contenedor;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la barra inferior de mensajes (confirma votos y avisa
-     * de errores de validación sin ventanas emergentes innecesarias).
-     */
     private JComponent crearBarraEstado() {
         var panel = new JPanel(new BorderLayout());
         panel.setBackground(FONDO_TARJETA);
@@ -299,14 +285,9 @@ public class EncuestaGUI extends JFrame {
     }
 
     // ============================================================================
-    // 2) VISTA "VOTAR" (tarjetas de preguntas + botón de envío)
+    // 2) VISTA "VOTAR" (tarjeta bienvenida + barra progreso en vivo + preguntas)
     // ============================================================================
 
-    /**
-     * ¿QUÉ HACE? Arma el formulario: una tarjeta blanca por pregunta con sus
-     * opciones (botones redondos, solo UNO marcable por pregunta) y el botón
-     * grande de envío al final.
-     */
     private JPanel construirVistaVotar() {
         grupos.clear();
         botonesPorPregunta.clear();
@@ -314,38 +295,40 @@ public class EncuestaGUI extends JFrame {
         vista.setBackground(FONDO_APP);
         vista.setLayout(new BoxLayout(vista, BoxLayout.Y_AXIS));
 
+        // 1. Tarjeta de bienvenida
+        vista.add(tarjetaBienvenida());
+        vista.add(Box.createVerticalStrut(12));
+
+        // 2. Barra de progreso interactiva de llenado en vivo
+        vista.add(crearTarjetaProgresoLlenado());
+        vista.add(Box.createVerticalStrut(14));
+
         var preguntas = encuesta.preguntas();
         if (preguntas.isEmpty()) {
             vista.add(tarjetaAviso("Esta encuesta aún no tiene preguntas."));
             return vista;
         }
 
-        // Barra de progreso interactiva de llenado en tiempo real
-        vista.add(crearTarjetaProgresoLlenado());
-        vista.add(Box.createVerticalStrut(14));
-
-        // Una tarjeta por pregunta (índice protegido: se usa la lista local).
+        // 3. Una tarjeta por pregunta
         for (int i = 0; i < preguntas.size(); i++) {
             vista.add(tarjetaPregunta(preguntas.get(i), i + 1));
             vista.add(Box.createVerticalStrut(14));
         }
 
-        // Fila de acciones (Enviar voto + Limpiar selecciones)
+        // 4. Panel de acciones (Enviar respuesta + Limpiar respuestas)
         var panelAcciones = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         panelAcciones.setOpaque(false);
         panelAcciones.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         var enviar = new JButton("Enviar respuesta anónima");
         enviar.setFont(fuente(Font.BOLD, 15));
-        enviar.setBackground(BOTON_FONDO); // azul oscuro: blanco encima = 5.5:1
+        enviar.setBackground(BOTON_FONDO);
         enviar.setForeground(Color.WHITE);
         enviar.setFocusPainted(false);
-        // CONTRASTE: garantiza que el botón se pinte con nuestro color oscuro
         enviar.setContentAreaFilled(false);
         enviar.setOpaque(true);
         enviar.setBorder(BorderFactory.createEmptyBorder(12, 20, 12, 20));
-        enviar.setMaximumSize(new Dimension(340, 52));
-        // Al pulsar: valida que todo esté respondido y registra el voto.
+        enviar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         enviar.addActionListener(e -> enviarVoto());
 
         var limpiar = new JButton("Limpiar respuestas");
@@ -358,7 +341,7 @@ public class EncuestaGUI extends JFrame {
         limpiar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDE),
                 BorderFactory.createEmptyBorder(11, 16, 11, 16)));
-        limpiar.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        limpiar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         limpiar.addActionListener(e -> {
             grupos.forEach(ButtonGroup::clearSelection);
             actualizarProgresoLlenado();
@@ -374,58 +357,31 @@ public class EncuestaGUI extends JFrame {
         ayuda.setFont(fuente(Font.ITALIC, 12));
         ayuda.setForeground(TEXTO_SUAVE);
         vista.add(ayuda);
-        getRootPane().setDefaultButton(enviar); // Enter también envía
+        getRootPane().setDefaultButton(enviar);
 
         actualizarProgresoLlenado();
         return vista;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la tarjeta de UNA pregunta: número + enunciado y sus
-     * opciones. El id real de cada opción se guarda invisible dentro de su
-     * botón para votar con identificadores seguros.
-     */
-    private JComponent tarjetaPregunta(com.mycompany.gestordeencuestas.Pregunta pregunta, int numero) {
-        var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
+    private static JComponent tarjetaBienvenida() {
+        var tarjeta = new RoundedPanel(16, new Color(234, 243, 250));
         tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
         tarjeta.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDE),
+                BorderFactory.createLineBorder(new Color(200, 224, 242)),
                 BorderFactory.createEmptyBorder(14, 18, 14, 18)));
-
-        var enunciado = new JLabel(numero + ". " + pregunta.texto());
-        enunciado.setFont(fuente(Font.BOLD, 15));
-        enunciado.setForeground(TEXTO);
-        tarjeta.add(enunciado);
-        tarjeta.add(Box.createVerticalStrut(8));
-
-        // ButtonGroup = solo se puede marcar UNA opción de esta pregunta.
-        var grupo = new ButtonGroup();
-        var botones = new ArrayList<JRadioButton>();
-        var opciones = pregunta.opciones();
-        for (int j = 0; j < opciones.size(); j++) {
-            var opcion = opciones.get(j);
-            var radio = new JRadioButton(opcion.texto());
-            radio.setBackground(FONDO_TARJETA);
-            radio.setFont(fuente(Font.PLAIN, 14));
-            radio.setForeground(TEXTO);
-            radio.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-            radio.putClientProperty("opcionId", opcion.id()); // id seguro, invisible
-            // Al hacer clic, actualiza la barra de progreso en vivo de inmediato
-            radio.addActionListener(e -> actualizarProgresoLlenado());
-            grupo.add(radio);
-            tarjeta.add(radio);
-            botones.add(radio);
-        }
-        grupos.add(grupo);
-        botonesPorPregunta.add(botones);
+        var hola = new JLabel("¡Tu opinión cuenta!");
+        hola.setFont(fuente(Font.BOLD, 17));
+        hola.setForeground(BOTON_FONDO);
+        var guia = new JLabel("Marca una opción por pregunta y pulsa Enviar. Tarda menos de un minuto y es 100% anónimo.");
+        guia.setFont(fuente(Font.PLAIN, 13));
+        guia.setForeground(TEXTO);
+        tarjeta.add(hola);
+        tarjeta.add(Box.createVerticalStrut(4));
+        tarjeta.add(guia);
         tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, tarjeta.getPreferredSize().height + 40));
         return tarjeta;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la tarjeta superior de progreso en tiempo real con
-     * título, porcentaje dinámico y barra de avance coloreada.
-     */
     private JComponent crearTarjetaProgresoLlenado() {
         var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
         tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
@@ -436,7 +392,7 @@ public class EncuestaGUI extends JFrame {
         var cabecera = new JPanel(new BorderLayout());
         cabecera.setOpaque(false);
 
-        var tituloProgreso = new JLabel("📝 Progreso de llenado");
+        var tituloProgreso = new JLabel("Progreso de llenado");
         tituloProgreso.setFont(fuente(Font.BOLD, 13));
         tituloProgreso.setForeground(TEXTO);
 
@@ -457,10 +413,6 @@ public class EncuestaGUI extends JFrame {
         return tarjeta;
     }
 
-    /**
-     * ¿QUÉ HACE? Recalcula cuántas preguntas han sido respondidas y actualiza
-     * en tiempo real la barra gráfica y los textos informativos.
-     */
     private void actualizarProgresoLlenado() {
         if (barraProgresoLlenado == null || etiquetaProgresoPorcentaje == null) {
             return;
@@ -483,7 +435,7 @@ public class EncuestaGUI extends JFrame {
         if (respondidas == total) {
             etiquetaProgresoPorcentaje.setText("✓ " + respondidas + " de " + total + " respondidas (100%) — ¡Listo para enviar!");
             etiquetaProgresoPorcentaje.setForeground(VERDE);
-            mensaje("✓ Formulario completado al 100%. Ya puedes pulsar 'Enviar respuesta anónima'.");
+            mensaje("✓ Formulario completado al 100%. Pulsa 'Enviar respuesta anónima'.");
         } else {
             etiquetaProgresoPorcentaje.setText(respondidas + " de " + total + " respondidas (" + (int) Math.round(pct) + "%)");
             etiquetaProgresoPorcentaje.setForeground(TEXTO_SUAVE);
@@ -491,20 +443,50 @@ public class EncuestaGUI extends JFrame {
         }
     }
 
+    private JComponent tarjetaPregunta(com.mycompany.gestordeencuestas.Pregunta pregunta, int numero) {
+        var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
+        tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
+        tarjeta.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDE),
+                BorderFactory.createEmptyBorder(14, 18, 14, 18)));
+
+        var enunciado = new JLabel(numero + ". " + pregunta.texto());
+        enunciado.setFont(fuente(Font.BOLD, 15));
+        enunciado.setForeground(TEXTO);
+        tarjeta.add(enunciado);
+        tarjeta.add(Box.createVerticalStrut(8));
+
+        var grupo = new ButtonGroup();
+        var botones = new ArrayList<JRadioButton>();
+        var opciones = pregunta.opciones();
+        for (int j = 0; j < opciones.size(); j++) {
+            var opcion = opciones.get(j);
+            var radio = new JRadioButton(opcion.texto());
+            radio.setBackground(FONDO_TARJETA);
+            radio.setFont(fuente(Font.PLAIN, 14));
+            radio.setForeground(TEXTO);
+            radio.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+            radio.putClientProperty("opcionId", opcion.id());
+            radio.addActionListener(e -> actualizarProgresoLlenado());
+            grupo.add(radio);
+            tarjeta.add(radio);
+            botones.add(radio);
+        }
+        grupos.add(grupo);
+        botonesPorPregunta.add(botones);
+        tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, tarjeta.getPreferredSize().height + 40));
+        return tarjeta;
+    }
+
     // ============================================================================
-    // 3) VISTA "RESULTADOS" (tarjetas resumen + gráficos por pregunta)
+    // 3) VISTA "RESULTADOS" (resumen + agradecimiento + gráficos multicolor + exportador)
     // ============================================================================
 
-    /**
-     * ¿QUÉ HACE? Redibuja la vista de resultados con los datos ACTUALES:
-     * 3 tarjetas resumen (total, estado, preguntas) y una tarjeta gráfica
-     * por pregunta con una barra por opción (porcentaje + votos).
-     */
     private void refrescarResultados() {
         vistaResultados.removeAll();
         vistaResultados.setLayout(new BoxLayout(vistaResultados, BoxLayout.Y_AXIS));
 
-        // Fila de tarjetas resumen (total / estado / preguntas).
+        // 1. Fila de tarjetas resumen (total / estado / preguntas)
         var fila = new JPanel(new GridLayout(1, 3, 12, 0));
         fila.setBackground(FONDO_APP);
         fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
@@ -514,7 +496,18 @@ public class EncuestaGUI extends JFrame {
         vistaResultados.add(fila);
         vistaResultados.add(Box.createVerticalStrut(14));
 
-        // Una tarjeta gráfica por pregunta (índices siempre verificados).
+        // 2. Fila de acciones (Exportar reporte + Enviar otra respuesta)
+        vistaResultados.add(barraAccionesResultados());
+        vistaResultados.add(Box.createVerticalStrut(14));
+
+        // 3. Agradecimiento justo después de votar
+        if (recienVotado) {
+            recienVotado = false;
+            vistaResultados.add(tarjetaAgradecimiento());
+            vistaResultados.add(Box.createVerticalStrut(14));
+        }
+
+        // 4. Tarjetas gráficas por pregunta con paleta multicolor
         var preguntas = encuesta.preguntas();
         var porcentajes = service.resultados(encuesta.id());
         var conteos = service.conteo(encuesta.id());
@@ -528,7 +521,53 @@ public class EncuestaGUI extends JFrame {
         vistaResultados.repaint();
     }
 
-    /** ¿QUÉ HACE? Crea una mini-tarjeta de resumen (número grande + etiqueta). */
+    private JComponent barraAccionesResultados() {
+        var fila = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        fila.setOpaque(false);
+        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+
+        var exportar = new JButton("Exportar reporte (.txt)");
+        exportar.setFont(fuente(Font.PLAIN, 13));
+        exportar.setBackground(FONDO_TARJETA);
+        exportar.setForeground(TEXTO);
+        exportar.setFocusPainted(false);
+        exportar.setContentAreaFilled(false);
+        exportar.setOpaque(true);
+        exportar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDE),
+                BorderFactory.createEmptyBorder(10, 16, 10, 16)));
+        exportar.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        exportar.addActionListener(e -> exportarResultados());
+
+        fila.add(exportar);
+        fila.add(botonPrimario("Enviar otra respuesta", e -> votarDeNuevo()));
+        return fila;
+    }
+
+    private static JComponent tarjetaAgradecimiento() {
+        var tarjeta = new RoundedPanel(16, new Color(232, 248, 240));
+        tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
+        tarjeta.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(168, 224, 189)),
+                BorderFactory.createEmptyBorder(16, 20, 16, 20)));
+        var gracias = new JLabel("¡Gracias por contestar la encuesta!");
+        gracias.setFont(fuente(Font.BOLD, 19));
+        gracias.setForeground(VERDE_OSCURO);
+        var sub = new JLabel("Tu respuesta ya cuenta en los resultados. Abajo puedes ver cómo va la votación.");
+        sub.setFont(fuente(Font.PLAIN, 13));
+        sub.setForeground(TEXTO);
+        tarjeta.add(gracias);
+        tarjeta.add(Box.createVerticalStrut(4));
+        tarjeta.add(sub);
+        tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, tarjeta.getPreferredSize().height + 50));
+        return tarjeta;
+    }
+
+    private void votarDeNuevo() {
+        irAVotar();
+        mensaje("Formulario listo para otra respuesta anónima.");
+    }
+
     private JComponent tarjetaResumen(String valor, String etiqueta) {
         var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
         tarjeta.setLayout(new GridLayout(2, 1, 0, 2));
@@ -546,12 +585,6 @@ public class EncuestaGUI extends JFrame {
         return tarjeta;
     }
 
-    /**
-     * ¿QUÉ HACE? Crea la tarjeta gráfica de UNA pregunta: por cada opción,
-     * una fila con nombre, votos, porcentaje y barra estilizada.
-     * Los mapas se consultan con getOrDefault: si un id faltara, se muestra
-     * 0 en lugar de fallar (programación defensiva).
-     */
     private JComponent tarjetaGrafica(com.mycompany.gestordeencuestas.Pregunta pregunta, int numero,
                                       Map<UUID, Map<UUID, Double>> porcentajes,
                                       Map<UUID, Map<UUID, Long>> conteos) {
@@ -572,67 +605,107 @@ public class EncuestaGUI extends JFrame {
         var opciones = pregunta.opciones();
         for (int j = 0; j < opciones.size(); j++) {
             var opcion = opciones.get(j);
-            // getOrDefault evita NullPointerException si un id no existiera.
             double pct = pcts.getOrDefault(opcion.id(), 0.0);
             long v = votos.getOrDefault(opcion.id(), 0L);
 
+            // Asignación de color armonioso de la paleta
+            Color colorOpcion = PALETA_RESULTADOS[j % PALETA_RESULTADOS.length];
+
             var fila = new JPanel(new BorderLayout(10, 0));
             fila.setOpaque(false);
+
+            // Indicador de color + nombre de opción
+            var panelIzquierda = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            panelIzquierda.setOpaque(false);
+            var puntoColor = new JLabel("● ");
+            puntoColor.setFont(fuente(Font.BOLD, 14));
+            puntoColor.setForeground(colorOpcion);
             var nombre = new JLabel(opcion.texto());
             nombre.setFont(fuente(Font.PLAIN, 13));
             nombre.setForeground(TEXTO);
-            nombre.setPreferredSize(new Dimension(140, 20));
-            // Texto seguro: si el % viniera corrupto, se muestra 0.0 (nunca NaN).
+            panelIzquierda.add(puntoColor);
+            panelIzquierda.add(nombre);
+
             var cifra = new JLabel("%s  ·  %d voto%s".formatted(pctSeguro(pct), v, (v == 1 ? "" : "s")));
             cifra.setFont(fuente(Font.BOLD, 13));
             cifra.setForeground(TEXTO);
-            fila.add(nombre, BorderLayout.WEST);
+
+            fila.add(panelIzquierda, BorderLayout.WEST);
             fila.add(cifra, BorderLayout.EAST);
             tarjeta.add(fila);
             tarjeta.add(Box.createVerticalStrut(4));
 
-            // Barra dibujada a medida (sin JProgressBar: sin errores de rango).
-            var barra = new BarraResultado();
+            // Barra gráfica estilizada con el color asignado a la opción
+            var barra = new BarraResultado(colorOpcion);
             barra.setPorcentaje(pct);
             tarjeta.add(barra);
             tarjeta.add(Box.createVerticalStrut(10));
         }
-        tarjeta.setMaximumSize(new Dimension(Integer.MAX_VALUE, tarjeta.getPreferredSize().height + 60));
         return tarjeta;
     }
 
+    private void exportarResultados() {
+        var chooser = new JFileChooser();
+        String sugerido = "Resultados_" + encuesta.titulo().replaceAll("[^a-zA-Z0-9.-]", "_") + ".txt";
+        chooser.setSelectedFile(new File(sugerido));
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            var file = chooser.getSelectedFile();
+            try (var writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                writer.println("==================================================");
+                writer.println("REPORTE DE RESULTADOS - GESTOR DE ENCUESTAS");
+                writer.println("Título: " + encuesta.titulo());
+                writer.println("Estado: " + encuesta.estado());
+                writer.println("Total de respuestas anónimas: " + totalSeguro());
+                writer.println("Fecha de generación: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                writer.println("==================================================\n");
+
+                var porcentajes = service.resultados(encuesta.id());
+                var conteos = service.conteo(encuesta.id());
+                var preguntas = encuesta.preguntas();
+                for (int i = 0; i < preguntas.size(); i++) {
+                    var p = preguntas.get(i);
+                    writer.println((i + 1) + ". " + p.texto());
+                    var pcts = porcentajes.getOrDefault(p.id(), Map.of());
+                    var votos = conteos.getOrDefault(p.id(), Map.of());
+                    for (var op : p.opciones()) {
+                        double pct = pcts.getOrDefault(op.id(), 0.0);
+                        long v = votos.getOrDefault(op.id(), 0L);
+                        writer.printf("   - %-25s : %6.1f%% (%d votos)%n", op.texto(), pct, v);
+                    }
+                    writer.println();
+                }
+                mensaje("Reporte exportado exitosamente en: " + file.getName());
+                JOptionPane.showMessageDialog(this,
+                        "Reporte exportado correctamente en:\n" + file.getAbsolutePath(),
+                        "Exportación Exitosa", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                mensaje("Error al exportar: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this,
+                        "No se pudo exportar el archivo: " + ex.getMessage(),
+                        "Error al exportar", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
     // ============================================================================
-    // 4) LÓGICA DE LA VENTANA (demo, voto, navegación y mensajes)
+    // 4) LÓGICA DE VOTACIÓN Y DATOS DE EJEMPLO
     // ============================================================================
 
-    /**
-     * ¿QUÉ HACE? Prepara la encuesta de ejemplo: la crea, le agrega 2
-     * preguntas, la PUBLICA (Regla 1: queda congelada) y registra 3 votos
-     * anónimos iniciales solo con ids técnicos (Regla 3).
-     */
     private void cargarDemo() {
         encuesta = service.crearEncuesta("Hábitos de estudio");
-        var p1 = service.agregarPregunta(encuesta.id(),
-                "¿Cuántas horas estudias al día?", List.of("Menos de 1h", "1-3h", "Más de 3h"));
-        var p2 = service.agregarPregunta(encuesta.id(),
-                "¿Dónde prefieres estudiar?", List.of("Casa", "Biblioteca", "Café"));
+        var p1 = service.agregarPregunta(encuesta.id(), "¿Cuántas horas estudias al día?",
+                List.of("Menos de 1h", "1-3h", "Más de 3h"));
+        var p2 = service.agregarPregunta(encuesta.id(), "¿Dónde prefieres estudiar?",
+                List.of("Casa", "Biblioteca", "Café"));
         service.publicar(encuesta.id());
+
         service.responder(encuesta.id(), Map.of(p1.id(), p1.opciones().get(1).id(), p2.id(), p2.opciones().get(0).id()));
         service.responder(encuesta.id(), Map.of(p1.id(), p1.opciones().get(2).id(), p2.id(), p2.opciones().get(1).id()));
         service.responder(encuesta.id(), Map.of(p1.id(), p1.opciones().get(1).id(), p2.id(), p2.opciones().get(1).id()));
     }
 
-    /**
-     * ¿QUÉ HACE? Lee lo marcado y registra el voto anónimo.
-     * ¿CÓMO PROTEGE LAS REGLAS?
-     * - Si falta alguna pregunta: AVISA y no vota (anti-parcial, defensa).
-     * - service.responder valida opción propia y encuesta publicada
-     *   (Reglas 1 y 2): lo ajeno se rechaza y se muestra el motivo.
-     * - Jamás se pide un dato personal (Regla 3).
-     */
     private void enviarVoto() {
         var preguntas = encuesta.preguntas();
-        // Defensa: las listas de botones siempre deben calzar con las preguntas.
         if (botonesPorPregunta.size() != preguntas.size()) {
             mensaje("Error interno: formulario desactualizado. Pulsa Reiniciar demo.");
             return;
@@ -647,25 +720,25 @@ public class EncuestaGUI extends JFrame {
                     marcada = (UUID) radio.getClientProperty("opcionId");
                 }
             }
-            // Anti-parcial: cada pregunta es obligatoria (opción única completa).
             if (marcada == null) {
                 String falta = preguntas.get(i).texto();
                 mensaje("Te falta responder: \"" + falta + "\"");
                 JOptionPane.showMessageDialog(this,
-                        "Responde TODAS las preguntas antes de enviar.\nTe falta: \"" + falta + "\"",
+                        "Responde TODAS las preguntas antes de enviar.\nTe falta responder: \"" + falta + "\"",
                         "Respuesta incompleta", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             seleccion.put(preguntas.get(i).id(), marcada);
         }
         try {
-            service.responder(encuesta.id(), seleccion); // validación estricta aquí
-            grupos.forEach(g -> g.clearSelection());    // limpia para el siguiente votante
+            service.responder(encuesta.id(), seleccion);
+            grupos.forEach(ButtonGroup::clearSelection);
             actualizarProgresoLlenado();
+            recienVotado = true;
             refrescarResultados();
             mostrarCarta(VISTA_RESULTADOS);
             navResultados.setSelected(true);
-            mensaje("¡Gracias! Voto anónimo registrado. Total: " + totalSeguro() + ".");
+            mensaje("¡Gracias por contestar la encuesta! Total de respuestas: " + totalSeguro() + ".");
         } catch (IllegalArgumentException | IllegalStateException ex) {
             mensaje("Voto rechazado: " + ex.getMessage());
             JOptionPane.showMessageDialog(this, ex.getMessage(),
@@ -673,24 +746,20 @@ public class EncuestaGUI extends JFrame {
         }
     }
 
-    /** ¿QUÉ HACE? Muestra la vista indicada y marca su botón lateral. */
     private void mostrarCarta(String nombre) {
         cartas.show(panelCentral, nombre);
     }
 
-    /** ¿QUÉ HACE? Atajo para ir a la vista de votar. */
     private void irAVotar() {
         navVotar.setSelected(true);
         mostrarCarta(VISTA_VOTAR);
         actualizarTotal();
     }
 
-    /** ¿QUÉ HACE? Actualiza el contador del lateral con el total real. */
     private void actualizarTotal() {
         etiquetaTotal.setText(String.valueOf(totalSeguro()));
     }
 
-    /** ¿QUÉ HACE? Total de votos, o 0 si la encuesta no existiera. */
     private int totalSeguro() {
         try {
             return service.totalRespuestas(encuesta.id());
@@ -699,21 +768,18 @@ public class EncuestaGUI extends JFrame {
         }
     }
 
-    /** ¿QUÉ HACE? Escribe un mensaje en la barra inferior de estado. */
     private void mensaje(String texto) {
         etiquetaEstado.setText(texto == null ? "" : texto);
     }
 
     // ============================================================================
-    // 5) PEQUEÑAS AYUDAS VISUALES (fuentes, etiquetas, tarjetas de aviso)
+    // 5) AYUDAS VISUALES Y BOTONES
     // ============================================================================
 
-    /** ¿QUÉ HACE? Crea la fuente de la app (clara y legible). */
     private static Font fuente(int estilo, int tamanio) {
         return new Font("Segoe UI", estilo, tamanio);
     }
 
-    /** ¿QUÉ HACE? Etiqueta pequeña gris para los títulos del lateral. */
     private static JLabel etiquetaLateral(String texto) {
         var l = new JLabel(texto);
         l.setFont(fuente(Font.BOLD, 11));
@@ -721,7 +787,6 @@ public class EncuestaGUI extends JFrame {
         return l;
     }
 
-    /** ¿QUÉ HACE? Botón de navegación del lateral (claro cuando está activo). */
     private static JToggleButton botonLateral(String texto, boolean activo) {
         var b = new JToggleButton(texto, activo);
         b.setFocusPainted(false);
@@ -729,22 +794,15 @@ public class EncuestaGUI extends JFrame {
         b.setHorizontalAlignment(SwingConstants.LEFT);
         b.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
         b.setMaximumSize(new Dimension(220, 40));
-        // CONTRASTE: mismo caso que "Enviar": sin estas 2 líneas, el L&F nativo
-        // pinta el botón gris claro y el texto blanco se vuelve invisible.
         b.setContentAreaFilled(false);
         b.setOpaque(true);
-        // Colores distintos según esté seleccionado o no (se actualizan solos).
         b.setBackground(activo ? BOTON_FONDO : LATERAL);
         b.setForeground(Color.WHITE);
+        b.setCursor(new Cursor(Cursor.HAND_CURSOR));
         b.addChangeListener(e -> b.setBackground(b.isSelected() ? BOTON_FONDO : LATERAL));
         return b;
     }
 
-    /**
-     * ¿QUÉ HACE? Botón de ACCIÓN del lateral (no es navegación: ejecuta algo).
-     * ¿PARA QUÉ? Para "+ Crear formulario": mismo tratamiento de contraste
-     * garantizado, pero con su propio color para distinguirlo del menú.
-     */
     private static JButton botonAccionLateral(String texto, Color fondo) {
         var b = new JButton(texto);
         b.setFocusPainted(false);
@@ -752,23 +810,33 @@ public class EncuestaGUI extends JFrame {
         b.setHorizontalAlignment(SwingConstants.LEFT);
         b.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
         b.setMaximumSize(new Dimension(220, 40));
-        b.setContentAreaFilled(false); // ver comentario de contraste en Enviar
+        b.setContentAreaFilled(false);
         b.setOpaque(true);
         b.setBackground(fondo);
         b.setForeground(Color.WHITE);
+        b.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return b;
     }
 
-    /**
-     * ¿QUÉ HACE? Devuelve el título del formulario activo recortado a 40
-     * caracteres para que quepa en el encabezado.
-     */
+    private static JButton botonPrimario(String texto, java.awt.event.ActionListener accion) {
+        var b = new JButton(texto);
+        b.setFont(fuente(Font.BOLD, 14));
+        b.setBackground(BOTON_FONDO);
+        b.setForeground(Color.WHITE);
+        b.setFocusPainted(false);
+        b.setContentAreaFilled(false);
+        b.setOpaque(true);
+        b.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        b.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        b.addActionListener(accion);
+        return b;
+    }
+
     private String tituloCorto() {
         String t = (encuesta == null) ? "" : encuesta.titulo();
         return (t.length() <= 40) ? t : (t.substring(0, 37) + "...");
     }
 
-    /** ¿QUÉ HACE? Tarjeta de aviso para casos vacíos (ej: sin preguntas). */
     private static JComponent tarjetaAviso(String texto) {
         var tarjeta = new RoundedPanel(16, FONDO_TARJETA);
         tarjeta.setBorder(BorderFactory.createCompoundBorder(
@@ -782,64 +850,59 @@ public class EncuestaGUI extends JFrame {
     }
 
     // ============================================================================
-    // 6) COMPONENTES A MEDIDA (tarjeta redondeada + barra sin errores de rango)
+    // 6) COMPONENTES A MEDIDA (RoundedPanel, BarraResultado, BarraProgresoLlenado)
     // ============================================================================
 
-    /**
-     * ¿QUÉ ES? Un JPanel con fondo de esquinas redondeadas.
-     * ¿PARA QUÉ? Da el aspecto moderno de "tarjetas" del panel de control.
-     */
     private static class RoundedPanel extends JPanel {
-        private final int radio; // qué tan redondas son las esquinas
+        private final int radio;
         private final Color fondo;
 
         RoundedPanel(int radio, Color fondo) {
             super();
-            this.radio = Math.clamp(radio, 0, 60); // valor siempre válido
+            this.radio = Math.clamp(radio, 0, 60);
             this.fondo = fondo;
-            setOpaque(false); // transparente: solo se ve el redondeado
+            setOpaque(false);
         }
 
         @Override
         protected void paintComponent(Graphics g) {
-            super.paintComponent(g); // primero lo normal (casi nada, es transparente)
+            super.paintComponent(g);
             var g2 = (Graphics2D) g.create();
             try {
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON); // bordes suaves
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(fondo);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), radio, radio);
             } finally {
-                g2.dispose(); // liberar recursos gráficos (buena práctica)
+                g2.dispose();
             }
         }
     }
 
     /**
-     * ¿QUÉ ES? Una barra de progreso dibujada a mano (fondo + relleno).
-     * ¿PARA QUÉ? Muestra el % de cada opción con estilo propio.
-     * ¿POR QUÉ ES MÁS SEGURA? No usa el modelo de rango de Swing: el valor
-     * se limita con Math.clamp(0..100) y el ancho se calcula con aritmética
-     * protegida, así que el error "rango inválido" no puede ocurrir.
+     * Barra de resultado para las opciones con color configurable y sin errores de rango.
      */
     private static final class BarraResultado extends JComponent {
-        private double porcentaje; // siempre entre 0 y 100
+        private double porcentaje;
+        private final Color colorBarra;
 
         BarraResultado() {
+            this(ACENTO);
+        }
+
+        BarraResultado(Color color) {
             this.porcentaje = 0.0;
+            this.colorBarra = (color != null) ? color : ACENTO;
             setPreferredSize(new Dimension(10, 14));
             setMinimumSize(new Dimension(10, 14));
-            // Texto accesible (protegido: en algunos contextos puede ser null).
             var acc = getAccessibleContext();
             if (acc != null) {
                 acc.setAccessibleName("Barra de porcentaje");
             }
         }
 
-        /** Fija el valor limitándolo a [0, 100]; acepta NaN/infinitos sin romperse. */
         void setPorcentaje(double valor) {
             if (Double.isNaN(valor) || Double.isInfinite(valor)) {
-                valor = 0.0; // valor corrupto -> se muestra 0 en vez de fallar
+                valor = 0.0;
             }
             this.porcentaje = Math.clamp(valor, 0.0, 100.0);
             var acc = getAccessibleContext();
@@ -854,19 +917,20 @@ public class EncuestaGUI extends JFrame {
             super.paintComponent(g);
             var g2 = (Graphics2D) g.create();
             try {
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int w = Math.max(0, getWidth());
                 int h = Math.max(0, getHeight());
                 int radio = Math.clamp(h, 0, 20);
-                // 1) Pista (fondo gris claro a todo lo ancho).
+
+                // Fondo de pista
                 g2.setColor(PISTA_BARRA);
                 g2.fillRoundRect(0, 0, w, h, radio, radio);
-                // 2) Relleno azul proporcional, limitado al ancho real.
+
+                // Relleno con el color de la opción
                 int relleno = (int) Math.round(w * (porcentaje / 100.0));
                 relleno = Math.clamp(relleno, 0, w);
                 if (relleno > 0 && h > 0) {
-                    g2.setColor(ACENTO);
+                    g2.setColor(colorBarra);
                     g2.fillRoundRect(0, 0, relleno, h, radio, radio);
                 }
             } finally {
@@ -876,9 +940,7 @@ public class EncuestaGUI extends JFrame {
     }
 
     /**
-     * ¿QUÉ ES? Barra de progreso interactiva del llenado de la encuesta en tiempo real.
-     * ¿PARA QUÉ? Proporciona feedback visual inmediato mientras el usuario
-     * va respondiendo las preguntas (cambia a verde esmeralda al completarse).
+     * Barra interactiva de llenado en vivo que cambia a verde al 100%.
      */
     private static final class BarraProgresoLlenado extends JComponent {
         private double porcentaje = 0.0;
@@ -916,11 +978,9 @@ public class EncuestaGUI extends JFrame {
                 int h = Math.max(0, getHeight());
                 int radio = Math.clamp(h, 0, 20);
 
-                // 1) Pista gris clara
                 g2.setColor(PISTA_BARRA);
                 g2.fillRoundRect(0, 0, w, h, radio, radio);
 
-                // 2) Avance proporcional (azul durante el llenado, verde al completar)
                 int relleno = (int) Math.round(w * (porcentaje / 100.0));
                 relleno = Math.clamp(relleno, 0, w);
                 if (relleno > 0 && h > 0) {
@@ -934,30 +994,15 @@ public class EncuestaGUI extends JFrame {
     }
 
     // ============================================================================
-    // 8) CREADOR DE FORMULARIO PROPIO (título + preguntas + opciones)
+    // 7) CREADOR DE FORMULARIO PROPIO
     // ============================================================================
 
-    /**
-     * ¿QUÉ HACE? Abre el asistente (ventana modal) para crear un formulario
-     * propio: el usuario escribe el título, agrega preguntas y define las
-     * opciones de cada una. Al pulsar "Publicar formulario", se crea y se
-     * publica, pasando a ser el formulario ACTIVO para votar y ver resultados.
-     * ¿CÓMO SE MANTIENEN LAS REGLAS? No hay código nuevo de reglas: se usan
-     * SOLO los servicios existentes (crearEncuesta / agregarPregunta /
-     * publicar), que ya validan todo: título no vacío, enunciados no vacíos,
-     * 2-10 opciones por pregunta, mínimo 1 pregunta para publicar y
-     * congelamiento total tras publicar (Regla 1). El voto posterior sigue
-     * pasando por responder() (Reglas 2 y 3). Anonimato intacto: el asistente
-     * no tiene ningún campo de datos personales.
-     */
     private void abrirCreadorFormulario() {
-        // Modal (true): bloquea la ventana principal hasta terminar o cancelar.
         var dialogo = new JDialog(this, "Crear mi propio formulario", true);
         dialogo.setSize(680, 640);
         dialogo.setLocationRelativeTo(this);
         dialogo.setLayout(new BorderLayout());
 
-        // ---- Arriba: título del nuevo formulario ----
         var norte = new JPanel(new BorderLayout(0, 4));
         norte.setBackground(FONDO_TARJETA);
         norte.setBorder(BorderFactory.createEmptyBorder(14, 16, 10, 16));
@@ -970,13 +1015,11 @@ public class EncuestaGUI extends JFrame {
         norte.add(campoTitulo, BorderLayout.CENTER);
         dialogo.add(norte, BorderLayout.NORTH);
 
-        // ---- Centro: bloques de preguntas (con scroll si hay muchas) ----
         var contenedor = new JPanel();
         contenedor.setBackground(FONDO_APP);
         contenedor.setLayout(new BoxLayout(contenedor, BoxLayout.Y_AXIS));
         contenedor.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         var bloques = new ArrayList<BloquePregunta>();
-        // Refresca números y botones tras agregar/quitar (siempre en orden).
         Runnable refrescar = () -> {
             contenedor.removeAll();
             for (int i = 0; i < bloques.size(); i++) {
@@ -987,19 +1030,18 @@ public class EncuestaGUI extends JFrame {
             contenedor.revalidate();
             contenedor.repaint();
         };
-        // Empieza con 2 bloques vacíos (igual que la demo: lo recomendado).
         bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
         bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
         refrescar.run();
         dialogo.add(new JScrollPane(contenedor), BorderLayout.CENTER);
 
-        // ---- Abajo: agregar pregunta + publicar/cancelar ----
         var sur = new JPanel(new BorderLayout(10, 0));
         sur.setBackground(FONDO_TARJETA);
         sur.setBorder(BorderFactory.createEmptyBorder(10, 16, 12, 16));
         var agregar = new JButton("+ Agregar pregunta");
         agregar.setFocusPainted(false);
         agregar.setFont(fuente(Font.BOLD, 13));
+        agregar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         agregar.addActionListener(e -> {
             bloques.add(new BloquePregunta(() -> quitarBloque(contenedor, bloques, refrescar)));
             refrescar.run();
@@ -1008,14 +1050,16 @@ public class EncuestaGUI extends JFrame {
         botones.setOpaque(false);
         var cancelar = new JButton("Cancelar");
         cancelar.setFocusPainted(false);
+        cancelar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         cancelar.addActionListener(e -> dialogo.dispose());
         var publicar = new JButton("Publicar formulario");
         publicar.setFont(fuente(Font.BOLD, 13));
-        publicar.setBackground(BOTON_FONDO); // mismo azul legible que Enviar
+        publicar.setBackground(BOTON_FONDO);
         publicar.setForeground(Color.WHITE);
         publicar.setFocusPainted(false);
-        publicar.setContentAreaFilled(false); // contraste garantizado (ver Enviar)
+        publicar.setContentAreaFilled(false);
         publicar.setOpaque(true);
+        publicar.setCursor(new Cursor(Cursor.HAND_CURSOR));
         publicar.addActionListener(e -> publicarFormularioPropio(dialogo, campoTitulo, bloques));
         botones.add(cancelar);
         botones.add(publicar);
@@ -1023,14 +1067,9 @@ public class EncuestaGUI extends JFrame {
         sur.add(botones, BorderLayout.EAST);
         dialogo.add(sur, BorderLayout.SOUTH);
 
-        dialogo.setVisible(true); // al ser modal, espera aquí hasta cerrar
+        dialogo.setVisible(true);
     }
 
-    /**
-     * ¿QUÉ HACE? Quita un bloque de pregunta del asistente (lo pide el botón
-     * "Quitar" de cada bloque). No deja quitar el ÚLTIMO: siempre queda al
-     * menos 1, porque publicar exige mínimo 1 pregunta.
-     */
     private void quitarBloque(JPanel contenedor, List<BloquePregunta> bloques, Runnable refrescar) {
         if (bloques.size() <= 1) {
             JOptionPane.showMessageDialog(this,
@@ -1038,18 +1077,10 @@ public class EncuestaGUI extends JFrame {
                     "No se puede quitar", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        // Quita el ÚLTIMO bloque (orden predecible y sin índices frágiles).
         bloques.remove(bloques.size() - 1);
         refrescar.run();
     }
 
-    /**
-     * ¿QUÉ HACE? Valida el asistente y publica el formulario propio.
-     * Validación en 2 capas (como en el voto): primero la ventana avisa con
-     * el número de pregunta exacta; luego los SERVICIOS reaplican las reglas
-     * del dominio y su error también se muestra. Si algo falla, NO se cambia
-     * el formulario activo (todo o nada).
-     */
     private void publicarFormularioPropio(JDialog dialogo, JTextField campoTitulo,
                                           List<BloquePregunta> bloques) {
         String titulo = campoTitulo.getText().strip();
@@ -1057,7 +1088,6 @@ public class EncuestaGUI extends JFrame {
             avisar(dialogo, "Escribe el título del formulario.");
             return;
         }
-        // Capa 1 (ventana): cada bloque visible debe estar completo.
         var datos = new ArrayList<Map.Entry<String, List<String>>>();
         for (int i = 0; i < bloques.size(); i++) {
             String en = bloques.get(i).enunciado();
@@ -1065,43 +1095,33 @@ public class EncuestaGUI extends JFrame {
                 avisar(dialogo, "La pregunta " + (i + 1) + " no tiene enunciado.");
                 return;
             }
-            var ops = bloques.get(i).opciones(); // textos recortados, sin vacías
+            var ops = bloques.get(i).opciones();
             if (ops.size() < 2) {
                 avisar(dialogo, "La pregunta " + (i + 1) + " necesita al menos 2 opciones con texto.");
                 return;
             }
             datos.add(Map.entry(en, ops));
         }
-        // Capa 2 (servicios): crean y publican aplicando las reglas del dominio.
         try {
             var nueva = service.crearEncuesta(titulo);
             for (var d : datos) {
                 service.agregarPregunta(nueva.id(), d.getKey(), d.getValue());
             }
-            service.publicar(nueva.id()); // Regla 1: desde aquí queda congelada
-            encuesta = nueva;             // pasa a ser el formulario activo
+            service.publicar(nueva.id());
+            encuesta = nueva;
             dialogo.dispose();
-            armarContenido();             // reconstruye votar/resultados con lo nuevo
+            armarContenido();
             mensaje("Formulario \"" + tituloCorto() + "\" publicado. ¡Ya puedes votar!");
         } catch (RuntimeException ex) {
-            // El formulario activo NO cambia: se muestra el motivo del dominio.
             avisar(dialogo, "No se pudo publicar: " + ex.getMessage());
         }
     }
 
-    /** ¿QUÉ HACE? Muestra un aviso del asistente (ventana pequeña amarilla). */
     private static void avisar(JDialog dialogo, String texto) {
         JOptionPane.showMessageDialog(dialogo, texto,
                 "Revisa tu formulario", JOptionPane.WARNING_MESSAGE);
     }
 
-    /**
-     * ¿QUÉ ES? Un bloque del asistente: UNA pregunta con sus opciones.
-     * ¿PARA QUÉ? Cada bloque tiene campo de enunciado, campos de opción
-     * (empieza con 2), botones +/− opción y botón de quitar pregunta.
-     * Los límites del dominio se cumplen en la interfaz: mínimo 2 y máximo
-     * 10 opciones (los botones se desactivan en los extremos).
-     */
     private static final class BloquePregunta extends RoundedPanel {
         private final JLabel etiquetaNum = new JLabel();
         private final JTextField campoEnunciado = new JTextField();
@@ -1117,7 +1137,6 @@ public class EncuestaGUI extends JFrame {
                     BorderFactory.createLineBorder(BORDE),
                     BorderFactory.createEmptyBorder(10, 14, 10, 14)));
 
-            // Fila superior: "Pregunta N" + botón quitar.
             var fila = new JPanel(new BorderLayout());
             fila.setOpaque(false);
             etiquetaNum.setFont(fuente(Font.BOLD, 14));
@@ -1125,29 +1144,27 @@ public class EncuestaGUI extends JFrame {
             var quitar = new JButton("Quitar");
             quitar.setFocusPainted(false);
             quitar.setFont(fuente(Font.PLAIN, 12));
-            // Al pulsar, el diálogo quita este bloque (con mínimo de 1).
+            quitar.setCursor(new Cursor(Cursor.HAND_CURSOR));
             quitar.addActionListener(e -> alQuitar.run());
             fila.add(etiquetaNum, BorderLayout.WEST);
             fila.add(quitar, BorderLayout.EAST);
             add(fila);
             add(Box.createVerticalStrut(6));
 
-            // Enunciado de la pregunta.
             campoEnunciado.setFont(fuente(Font.PLAIN, 13));
             add(campoEnunciado);
             add(Box.createVerticalStrut(8));
 
-            // Opciones (empieza con 2 vacías, como exige el dominio).
             listaOpciones.setOpaque(false);
             listaOpciones.setLayout(new BoxLayout(listaOpciones, BoxLayout.Y_AXIS));
             add(listaOpciones);
             agregarCampoOpcion();
             agregarCampoOpcion();
 
-            // Botones +/− opción.
             var filaBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
             filaBtns.setOpaque(false);
             btnMas.setFocusPainted(false);
+            btnMas.setCursor(new Cursor(Cursor.HAND_CURSOR));
             btnMas.addActionListener(e -> {
                 if (camposOpcion.size() < 10) {
                     agregarCampoOpcion();
@@ -1155,6 +1172,7 @@ public class EncuestaGUI extends JFrame {
                 }
             });
             btnMenos.setFocusPainted(false);
+            btnMenos.setCursor(new Cursor(Cursor.HAND_CURSOR));
             btnMenos.addActionListener(e -> {
                 if (camposOpcion.size() > 2) {
                     listaOpciones.remove(camposOpcion.remove(camposOpcion.size() - 1));
@@ -1168,7 +1186,6 @@ public class EncuestaGUI extends JFrame {
             refrescarBloque();
         }
 
-        /** ¿QUÉ HACE? Agrega un campo de opción vacío a este bloque. */
         private void agregarCampoOpcion() {
             var campo = new JTextField();
             campo.setFont(fuente(Font.PLAIN, 13));
@@ -1178,7 +1195,6 @@ public class EncuestaGUI extends JFrame {
             listaOpciones.add(Box.createVerticalStrut(4));
         }
 
-        /** ¿QUÉ HACE? Actualiza botones (límites 2-10) y repinta el bloque. */
         private void refrescarBloque() {
             btnMas.setEnabled(camposOpcion.size() < 10);
             btnMenos.setEnabled(camposOpcion.size() > 2);
@@ -1186,20 +1202,14 @@ public class EncuestaGUI extends JFrame {
             repaint();
         }
 
-        /** ¿QUÉ HACE? Pone el número visible ("Pregunta 1", "Pregunta 2"...). */
         void setNumero(int n) {
             etiquetaNum.setText("Pregunta " + n);
         }
 
-        /** ¿QUÉ HACE? Devuelve el enunciado recortado ("" si está vacío). */
         String enunciado() {
             return campoEnunciado.getText().strip();
         }
 
-        /**
-         * ¿QUÉ HACE? Devuelve los textos de opción recortados, SIN los vacíos.
-         * Así las casillas que se dejan en blanco no cuentan como opción.
-         */
         List<String> opciones() {
             var textos = new ArrayList<String>();
             for (int i = 0; i < camposOpcion.size(); i++) {
@@ -1213,28 +1223,17 @@ public class EncuestaGUI extends JFrame {
     }
 
     // ============================================================================
-    // 9) ARRANQUE DEL PROGRAMA (aspecto nativo + hilo seguro de Swing)
+    // 8) ARRANQUE DEL PROGRAMA
     // ============================================================================
 
-    /**
-     * Punto de entrada de la VENTANA.
-     * Usa el aspecto NATIVO del sistema (se ve moderno en Windows) y abre la
-     * ventana en el hilo especial de Swing (Event Dispatch Thread).
-     */
     public static void main(String[] args) {
         try {
-            // Aspecto nativo de Windows: botones y radios modernos del sistema.
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {
-            // Si falla, Swing usa su aspecto por defecto; el programa sigue igual.
         }
         SwingUtilities.invokeLater(() -> new EncuestaGUI().setVisible(true));
     }
 
-    /**
-     * Texto de porcentaje seguro para la vista: nunca muestra "NaN" ni
-     * valores fuera de 0-100 (los limita y formatea con 1 decimal).
-     */
     private static String pctSeguro(double pct) {
         if (Double.isNaN(pct) || Double.isInfinite(pct)) {
             pct = 0.0;
